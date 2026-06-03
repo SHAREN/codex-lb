@@ -47,6 +47,27 @@ describe("AccountUsagePanel", () => {
     expect(screen.getByText("Weekly remaining")).toBeInTheDocument();
   });
 
+
+  it("renders only the real primary 30d quota row for current free accounts", () => {
+    const account = createAccountSummary({
+      planType: "free",
+      usage: {
+        primaryRemainingPercent: 95,
+        secondaryRemainingPercent: null,
+      },
+      resetAtPrimary: "2026-01-31T00:00:00.000Z",
+      resetAtSecondary: null,
+      windowMinutesPrimary: 43_200,
+      windowMinutesSecondary: null,
+    });
+
+    render(<AccountUsagePanel account={account} trends={null} />);
+
+    expect(screen.getByText("30d remaining")).toBeInTheDocument();
+    expect(screen.queryByText("5h remaining")).not.toBeInTheDocument();
+    expect(screen.queryByText("Weekly remaining")).not.toBeInTheDocument();
+  });
+
   it("renders mapped label for the known gated additional quota limit", () => {
     const account = createAccountSummary({
       additionalQuotas: [

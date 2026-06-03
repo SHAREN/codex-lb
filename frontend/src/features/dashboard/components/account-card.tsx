@@ -11,7 +11,7 @@ import {
   quotaBarColor,
   quotaBarTrack,
 } from "@/utils/account-status";
-import { formatDateTimeInline, formatPercentNullable, formatQuotaResetLabel, formatSlug } from "@/utils/formatters";
+import { formatDateTimeInline, formatPercentNullable, formatQuotaResetLabel, formatSlug, formatWindowLabel } from "@/utils/formatters";
 
 type AccountAction = "details" | "resume" | "reauth" | "warmup-toggle";
 
@@ -65,12 +65,21 @@ function QuotaBar({
   );
 }
 
+function formatQuotaWindowLabel(key: "primary" | "secondary", minutes: unknown): string {
+  if (key === "secondary" && minutes === 10_080) {
+    return "Weekly";
+  }
+  return formatWindowLabel(key, minutes);
+}
+
 export function AccountCard({ account, showAccountId = false, onAction }: AccountCardProps) {
   const blurred = usePrivacyStore((s) => s.blurred);
   const status = normalizeStatus(account.status);
   const primaryRemaining = account.usage?.primaryRemainingPercent ?? null;
   const secondaryRemaining = account.usage?.secondaryRemainingPercent ?? null;
-  const weeklyOnly = account.windowMinutesPrimary == null && account.windowMinutesSecondary != null;
+  const hasPrimaryWindow = account.windowMinutesPrimary != null || primaryRemaining !== null || account.resetAtPrimary != null;
+  const hasSecondaryWindow = account.windowMinutesSecondary != null || secondaryRemaining !== null || account.resetAtSecondary != null;
+  const visibleQuotaRows = Number(hasPrimaryWindow) + Number(hasSecondaryWindow);
 
   const primaryReset = formatQuotaResetLabel(account.resetAtPrimary ?? null);
   const secondaryReset = formatQuotaResetLabel(account.resetAtSecondary ?? null);
@@ -113,10 +122,16 @@ export function AccountCard({ account, showAccountId = false, onAction }: Accoun
       </div>
 
       {/* Quota bars */}
-      <div className={cn("mt-3.5 grid gap-3", weeklyOnly ? "grid-cols-1" : "grid-cols-2")}>
-        {!weeklyOnly && <QuotaBar label="5h" percent={primaryRemaining} resetLabel={primaryReset} />}
-        <QuotaBar label="Weekly" percent={secondaryRemaining} resetLabel={secondaryReset} />
-      </div>
+      {visibleQuotaRows > 0 ? (
+        <div className={cn("mt-3.5 grid gap-3", visibleQuotaRows > 1 ? "grid-cols-2" : "grid-cols-1")}>
+          {hasPrimaryWindow ? (
+            <QuotaBar label={formatQuotaWindowLabel("primary", account.windowMinutesPrimary)} percent={primaryRemaining} resetLabel={primaryReset} />
+          ) : null}
+          {hasSecondaryWindow ? (
+            <QuotaBar label={formatQuotaWindowLabel("secondary", account.windowMinutesSecondary)} percent={secondaryRemaining} resetLabel={secondaryReset} />
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="mt-3 flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-2.5 py-2 text-xs">
         <div className="min-w-0">

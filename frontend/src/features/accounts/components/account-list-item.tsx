@@ -7,7 +7,7 @@ import { MiniQuotaBar } from "@/components/mini-quota-bar";
 import type { AccountSummary } from "@/features/accounts/schemas";
 import { normalizeStatus } from "@/utils/account-status";
 import { formatCompactAccountId } from "@/utils/account-identifiers";
-import { formatDateTimeInline, formatPercentNullable, formatQuotaResetLabel, formatSlug } from "@/utils/formatters";
+import { formatDateTimeInline, formatPercentNullable, formatQuotaResetLabel, formatSlug, formatWindowLabel } from "@/utils/formatters";
 
 export type AccountListItemProps = {
   account: AccountSummary;
@@ -62,8 +62,12 @@ export function AccountListItem({ account, selected, showAccountId = false, onSe
         <StatusBadge status={status} />
       </div>
       <div className={cn("mt-2 grid gap-2", visibleQuotaRows > 1 ? "grid-cols-2" : "grid-cols-1")}>
-        {showPrimaryRow ? <MiniQuotaRow label="5h" percent={primary} resetAt={account.resetAtPrimary} /> : null}
-        {showSecondaryRow ? <MiniQuotaRow label="Weekly" percent={secondary} resetAt={account.resetAtSecondary} /> : null}
+        {showPrimaryRow ? (
+          <MiniQuotaRow label={formatQuotaWindowLabel("primary", account.windowMinutesPrimary)} percent={primary} resetAt={account.resetAtPrimary} />
+        ) : null}
+        {showSecondaryRow ? (
+          <MiniQuotaRow label={formatQuotaWindowLabel("secondary", account.windowMinutesSecondary)} percent={secondary} resetAt={account.resetAtSecondary} />
+        ) : null}
       </div>
       <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
         <span>{warmupLabel}</span>
@@ -71,6 +75,13 @@ export function AccountListItem({ account, selected, showAccountId = false, onSe
       </div>
     </button>
   );
+}
+
+function formatQuotaWindowLabel(key: "primary" | "secondary", minutes: unknown): string {
+  if (key === "secondary" && minutes === 10_080) {
+    return "Weekly";
+  }
+  return formatWindowLabel(key, minutes);
 }
 
 function MiniQuotaRow({

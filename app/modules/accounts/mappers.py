@@ -85,7 +85,9 @@ def _account_to_summary(
 
     status_primary_usage = effective_primary_usage
     status_primary_used_percent = primary_used_percent
-    if usage_core.capacity_for_plan(plan_type, "primary") == 0.0:
+    primary_has_plan_capacity = usage_core.capacity_for_plan(plan_type, "primary") != 0.0
+    primary_has_reported_quota = effective_primary_usage is not None and primary_used_percent is not None
+    if not primary_has_plan_capacity and not primary_has_reported_quota:
         if account.status != AccountStatus.RATE_LIMITED:
             status_primary_usage = None
             status_primary_used_percent = None

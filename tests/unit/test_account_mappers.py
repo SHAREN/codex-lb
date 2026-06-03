@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from cryptography.fernet import Fernet
+
+from app.core.crypto import TokenEncryptor
 from app.db.models import Account, AccountStatus, UsageHistory
-from app.modules.accounts.mappers import _effective_status_from_usage
+from app.modules.accounts.mappers import _account_to_summary, _effective_status_from_usage
 
 
 def _account(status: AccountStatus = AccountStatus.QUOTA_EXCEEDED) -> Account:
@@ -14,6 +17,7 @@ def _account(status: AccountStatus = AccountStatus.QUOTA_EXCEEDED) -> Account:
         id_token_encrypted=b"",
         status=status,
         reset_at=1_700_003_600,
+        limit_warmup_enabled=False,
     )
 
 
@@ -110,4 +114,45 @@ def test_effective_status_keeps_paused_account_paused_with_usable_credits() -> N
             secondary.used_percent,
         )
         == AccountStatus.PAUSED
+    )
+
+
+def test_free_account_exposes_reported_primary_30d_usage() -> None:
+    account = _account(AccountStatus.ACTIVE)
+    account.plan_type = "free"
+    usage = _primary_usage(used_percent=5.0, reset_at=1_783_098_041, window_minutes=43_200)
+
+    summary = _account_to_summary(
+        account,
+        usage,
+        None,
+        None,
+        None,
+        None,
+        TokenEncryptor(key=Fernet.generate_key()),
+        include_auth=False,
+    )
+
+    assert summary.usage is not None
+    assert summary.usage.primary_remaining_percent == 95.0
+    assert summary.window_minutes_primary == 43_200
+    assert summary.reset_at_primary is not None
+    assert summary.usage.secondary_remaining_percent is None
+    assert summary.window_minutes_secondary is None
+    assert summary.status == AccountStatus.ACTIVE.value
+
+
+def test_effective_status_recovers_quota_exceeded_when_only_primary_has_available_quota() -> None:
+    account = _account(AccountStatus.QUOTA_EXCEEDED)
+    primary = _primary_usage(used_percent=5.0, reset_at=1_783_098_041, window_minutes=43_200)
+
+    assert (
+        _effective_status_from_usage(
+            account,
+            primary,
+            primary.used_percent,
+            None,
+            None,
+        )
+        == AccountStatus.ACTIVE
     )

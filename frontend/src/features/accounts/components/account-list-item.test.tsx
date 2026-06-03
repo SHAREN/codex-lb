@@ -53,6 +53,28 @@ describe("AccountListItem", () => {
     expect(screen.getByText("Reset in 1d")).toBeInTheDocument();
   });
 
+
+  it("renders a single real primary-window row for free 30d quota", () => {
+    const account = createAccountSummary({
+      planType: "free",
+      usage: {
+        primaryRemainingPercent: 95,
+        secondaryRemainingPercent: null,
+      },
+      resetAtPrimary: "2026-01-31T12:00:00.000Z",
+      resetAtSecondary: null,
+      windowMinutesPrimary: 43_200,
+      windowMinutesSecondary: null,
+    });
+
+    render(<AccountListItem account={account} selected={false} onSelect={vi.fn()} />);
+
+    expect(screen.getByText("30d")).toBeInTheDocument();
+    expect(screen.getByTestId("mini-quota-track-30d-fill")).toHaveStyle({ width: "95%" });
+    expect(screen.queryByText("5h")).not.toBeInTheDocument();
+    expect(screen.queryByText("Weekly")).not.toBeInTheDocument();
+  });
+
   it("renders legacy primary quota data without window metadata", () => {
     const account = createAccountSummary({
       usage: {
