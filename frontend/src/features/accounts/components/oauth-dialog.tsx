@@ -34,6 +34,17 @@ function getStage(state: OAuthState): Stage {
   return "intro";
 }
 
+function proxyInputsEqual(left: AccountProxyInput, right: AccountProxyInput) {
+  return (
+    left.host === right.host &&
+    left.port === right.port &&
+    (left.username ?? null) === (right.username ?? null) &&
+    (left.password ?? null) === (right.password ?? null) &&
+    left.remoteDns === right.remoteDns &&
+    (left.label ?? null) === (right.label ?? null)
+  );
+}
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
 
@@ -175,6 +186,8 @@ export function OauthDialog({
   const [localFinishError, setLocalFinishError] = useState<string | null>(null);
   const stage = getStage(state);
   const completedRef = useRef(false);
+  const deviceProxyStartRef = useRef<AccountProxyInput | null>(null);
+  const autoFinishStartedRef = useRef(false);
   const browserRefreshInProgress = stage === "browser" && state.status === "starting";
 
   // Locked at start-time: the expect_proxy flag passed to /api/oauth/start
@@ -216,6 +229,8 @@ export function OauthDialog({
       setProxyValues(DEFAULT_PROXY_FORM_VALUES);
       setFinishing(false);
       setLocalFinishError(null);
+      deviceProxyStartRef.current = null;
+      autoFinishStartedRef.current = false;
     }
   };
 
@@ -224,21 +239,33 @@ export function OauthDialog({
     close(next);
   };
 
-  const handleStart = () => {
+  const handleStart = async () => {
     const nextExpectProxy = reauthAccountId ? false : showProxy;
     if (nextExpectProxy && !proxyValidation.ok) return;
+    const startProxy = nextExpectProxy && proxyValidation.ok ? proxyValidation.payload : undefined;
     setAttemptExpectsProxy(nextExpectProxy);
     setLocalFinishError(null);
-    void onStart(selectedMethod, {
-      expectProxy: nextExpectProxy,
-      ...(reauthAccountId ? { reauthAccountId } : {}),
-      proxy: nextExpectProxy && proxyValidation.ok ? proxyValidation.payload : undefined,
-    });
+    deviceProxyStartRef.current = null;
+    autoFinishStartedRef.current = false;
+    try {
+      await onStart(selectedMethod, {
+        expectProxy: nextExpectProxy,
+        ...(reauthAccountId ? { reauthAccountId } : {}),
+        proxy: startProxy,
+      });
+      if (selectedMethod === "device" && startProxy) {
+        deviceProxyStartRef.current = startProxy;
+      }
+    } catch {
+      deviceProxyStartRef.current = null;
+    }
   };
 
   const handleRefreshBrowserLink = () => {
     if (attemptExpectsProxy && !proxyValidation.ok) return;
     setLocalFinishError(null);
+    deviceProxyStartRef.current = null;
+    autoFinishStartedRef.current = false;
     void onStart("browser", {
       expectProxy: attemptExpectsProxy,
       ...(reauthAccountId ? { reauthAccountId } : {}),
@@ -249,10 +276,12 @@ export function OauthDialog({
   const handleChangeMethod = () => {
     setLocalFinishError(null);
     setAttemptExpectsProxy(false);
+    deviceProxyStartRef.current = null;
+    autoFinishStartedRef.current = false;
     onReset();
   };
 
-  const handleFinishSetup = async () => {
+  const handleFinishSetup = useCallback(async () => {
     if (expectingProxy && !proxyValidation.ok) return;
     setFinishing(true);
     setLocalFinishError(null);
@@ -260,11 +289,30 @@ export function OauthDialog({
     try {
       await onComplete(expectingProxy && proxyValidation.ok ? proxyValidation.payload : undefined);
     } catch (error) {
+      completedRef.current = false;
       setLocalFinishError(formatProbeError(error));
     } finally {
       setFinishing(false);
     }
-  };
+  }, [expectingProxy, onComplete, proxyValidation]);
+
+  useEffect(() => {
+    if (stage !== "tokens_ready") return;
+    if (
+      !expectingProxy ||
+      state.method !== "device" ||
+      finishing ||
+      completedRef.current ||
+      autoFinishStartedRef.current ||
+      !proxyValidation.ok ||
+      deviceProxyStartRef.current === null ||
+      !proxyInputsEqual(deviceProxyStartRef.current, proxyValidation.payload)
+    ) {
+      return;
+    }
+    autoFinishStartedRef.current = true;
+    void handleFinishSetup();
+  }, [expectingProxy, finishing, handleFinishSetup, proxyValidation, stage, state.method]);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -450,8 +498,7 @@ export function OauthDialog({
             <div className="flex items-start gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400">
               <Check className="mt-0.5 h-4 w-4 shrink-0" />
               <p>
-                Sign-in complete. Configure the proxy below, then click Finish to validate
-                and save the account.
+                Sign-in complete. Validating the proxy and saving the account.
               </p>
             </div>
             <ProxyFormSection
