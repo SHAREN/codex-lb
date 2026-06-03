@@ -22,6 +22,7 @@ PERMANENT_FAILURE_CODES = {
     # the account stops being routed to until it is re-authenticated.
     "token_expired": "Authentication token expired - re-login required",
     "account_session_expired": "ChatGPT session ended - re-login required",
+    "app_session_terminated": "ChatGPT session ended - re-login required",
     "account_auth_invalidated": "Authentication failed after token refresh - re-login required",
     "account_deactivated": "Account has been deactivated",
     "account_suspended": "Account has been suspended",

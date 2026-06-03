@@ -157,7 +157,6 @@ function AccountProxyForm({
           <Input
             id="proxy-port"
             inputMode="numeric"
-            pattern="\\d*"
             placeholder="1080"
             value={portText}
             onChange={(event) => setPortText(event.target.value)}

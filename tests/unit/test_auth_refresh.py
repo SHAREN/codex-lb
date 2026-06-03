@@ -34,6 +34,10 @@ def test_classify_refresh_error_token_expired_is_permanent():
     assert classify_refresh_error("token_expired") is True
 
 
+def test_classify_refresh_error_app_session_terminated_is_permanent():
+    assert classify_refresh_error("app_session_terminated") is True
+
+
 def test_classify_refresh_error_temporary():
     assert classify_refresh_error("temporary_error") is False
 
