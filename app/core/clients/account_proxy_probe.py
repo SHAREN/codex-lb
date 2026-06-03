@@ -1,4 +1,3 @@
-from urllib.parse import unquote
 """End-to-end SOCKS5 proxy probe.
 
 This module performs the save-time validation of a proposed per-account
@@ -22,6 +21,7 @@ Tests inject a stub session factory via :func:`_set_session_factory_for_test`
 to avoid spinning up a real SOCKS5 server on the unit-test path.
 """
 
+
 from __future__ import annotations
 
 import asyncio
@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from typing import Any, Awaitable, Callable
+from urllib.parse import unquote
 
 import aiohttp
 from aiohttp_socks import ProxyConnector, ProxyType
@@ -56,6 +57,13 @@ from app.core.utils.request_id import get_request_id
 from app.core.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
+
+
+_CONNECTIVITY_PROBE_URLS: tuple[str, ...] = (
+    "https://www.gstatic.com/generate_204",
+    "https://api.ipify.org?format=json",
+    "https://www.cloudflare.com/cdn-cgi/trace",
+)
 
 
 # Tuple of "TCP could not reach the SOCKS5 endpoint" errors. Includes
@@ -196,6 +204,23 @@ async def _build_probe_session(
     )
 
 
+def _build_proxy_connection(
+    *,
+    host: str,
+    port: int,
+    username: str | None,
+    password: str | None,
+    remote_dns: bool,
+) -> AccountProxyConnection:
+    return AccountProxyConnection(
+        host=host,
+        port=int(port),
+        username=unquote(username) if username else None,
+        password=unquote(password) if password else None,
+        remote_dns=bool(remote_dns),
+    )
+
+
 async def build_account_proxy_session(
     *,
     host: str,
@@ -213,13 +238,12 @@ async def build_account_proxy_session(
     upstream-TLS hop always uses the singleton codex SSL context.
     """
 
-    connection = AccountProxyConnection(
+    connection = _build_proxy_connection(
         host=host,
-        port=int(port),
-        username=unquote(username) if username else None,
-        password=unquote(password) if password else None,
-        remote_dns=bool(remote_dns,
-    ),
+        port=port,
+        username=username,
+        password=password,
+        remote_dns=remote_dns,
     )
     return await _build_probe_session(connection, timeout_seconds)
 
@@ -270,13 +294,12 @@ async def probe_account_proxy(
     auth_base_url = effective_settings.auth_base_url.rstrip("/")
     url = f"{auth_base_url}/oauth/token"
 
-    connection = AccountProxyConnection(
+    connection = _build_proxy_connection(
         host=host,
-        port=int(port),
-        username=unquote(username) if username else None,
-        password=unquote(password) if password else None,
-        remote_dns=bool(remote_dns,
-    ),
+        port=port,
+        username=username,
+        password=password,
+        remote_dns=remote_dns,
     )
     payload = {
         "grant_type": "refresh_token",
@@ -410,6 +433,86 @@ async def probe_account_proxy(
         started_at.isoformat(),
     )  # pragma: no cover
     return ProbeResult(reason=ProbeReason.PROXY_CONNECT, detail="unclassified")  # pragma: no cover
+
+
+async def probe_proxy_connectivity(
+    *,
+    host: str,
+    port: int,
+    username: str | None,
+    password: str | None,
+    remote_dns: bool,
+    settings: Settings | None = None,
+) -> ProbeResult:
+    """Validate SOCKS5 reachability without using account OAuth credentials."""
+
+    effective_settings = settings or get_settings()
+    timeout_seconds = float(effective_settings.account_proxy_probe_timeout_seconds)
+    connection = _build_proxy_connection(
+        host=host,
+        port=port,
+        username=username,
+        password=password,
+        remote_dns=remote_dns,
+    )
+    try:
+        session = await _build_probe_session(connection, timeout_seconds)
+    except _PROXY_CONNECT_ERRORS as exc:
+        return ProbeResult(reason=ProbeReason.PROXY_CONNECT, detail=_short_detail(exc), checked_at=utcnow())
+    except _PROXY_TIMEOUT_ERRORS as exc:
+        return ProbeResult(reason=ProbeReason.TIMEOUT, detail=_short_detail(exc), checked_at=utcnow())
+    except Exception as exc:  # pragma: no cover - defensive; misclassified as connect
+        logger.warning(
+            "Failed to construct proxy connectivity session for host=%s port=%s: %s",
+            host,
+            port,
+            exc,
+        )
+        return ProbeResult(reason=ProbeReason.PROXY_CONNECT, detail=_short_detail(exc), checked_at=utcnow())
+
+    last_status: int | None = None
+    last_detail: str | None = None
+    try:
+        async with session:
+            for url in _CONNECTIVITY_PROBE_URLS:
+                try:
+                    async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout_seconds)) as resp:
+                        last_status = resp.status
+                        if 200 <= resp.status < 300:
+                            return ProbeResult(
+                                reason=ProbeReason.OK,
+                                upstream_status_code=resp.status,
+                                checked_at=utcnow(),
+                            )
+                        last_detail = await _read_error_detail(resp)
+                except _PROXY_TIMEOUT_ERRORS as exc:
+                    return ProbeResult(reason=ProbeReason.TIMEOUT, detail=_short_detail(exc), checked_at=utcnow())
+                except _TLS_ERRORS as exc:
+                    return ProbeResult(reason=ProbeReason.TLS, detail=_short_detail(exc), checked_at=utcnow())
+                except _PROXY_CONNECT_ERRORS as exc:
+                    return ProbeResult(
+                        reason=ProbeReason.PROXY_CONNECT,
+                        detail=_short_detail(exc),
+                        checked_at=utcnow(),
+                    )
+                except _PROXY_PROTOCOL_ERRORS as exc:
+                    detail = _short_detail(exc)
+                    reason = ProbeReason.PROXY_AUTH if _looks_like_auth_failure(detail) else ProbeReason.PROXY_CONNECT
+                    return ProbeResult(reason=reason, detail=detail, checked_at=utcnow())
+                except aiohttp.ClientConnectorError as exc:
+                    return ProbeResult(
+                        reason=ProbeReason.PROXY_CONNECT,
+                        detail=_short_detail(exc),
+                        checked_at=utcnow(),
+                    )
+    except _PROXY_TIMEOUT_ERRORS as exc:
+        return ProbeResult(reason=ProbeReason.TIMEOUT, detail=_short_detail(exc), checked_at=utcnow())
+    return ProbeResult(
+        reason=ProbeReason.UPSTREAM_STATUS,
+        detail=last_detail or "connectivity probe endpoints did not return 2xx",
+        upstream_status_code=last_status,
+        checked_at=utcnow(),
+    )
 
 
 def _looks_like_auth_failure(detail: str | None) -> bool:

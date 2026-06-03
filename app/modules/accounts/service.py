@@ -25,6 +25,7 @@ from app.core.clients.account_proxy_probe import (
     ProbeResult,
     ProxyProbeError,
     probe_account_proxy,
+    probe_proxy_connectivity,
 )
 from app.core.crypto import TokenEncryptor
 from app.core.plan_types import coerce_account_plan_type
@@ -518,23 +519,27 @@ class AccountsService:
         else:
             password_plain = None
 
-        try:
-            refresh_token = self._encryptor.decrypt(account.refresh_token_encrypted)
-        except InvalidToken as exc:
-            # Same Fernet-key-rotation scenario as the password decrypt
-            # above, but for the OAuth refresh token. Without the
-            # original key we cannot recover the plaintext, and there
-            # is no operator-visible way to "re-enter" a refresh
-            # token (it can only be re-obtained by re-running the
-            # OAuth flow / re-importing auth.json). Surface a typed
-            # envelope so the dashboard can render an actionable
-            # message instead of a raw 500.
-            raise AccountCredentialsUnrecoverableError(account_id) from exc
-        result, rotated_tokens = await self._probe_proxy_payload(
-            refresh_token=refresh_token,
-            payload=payload,
-            password_plain=password_plain,
-        )
+        if _is_proxy_unreachable_deactivation(account):
+            result = await self._probe_proxy_connectivity_payload(payload=payload, password_plain=password_plain)
+            rotated_tokens: _RotatedTokens | None = None
+        else:
+            try:
+                refresh_token = self._encryptor.decrypt(account.refresh_token_encrypted)
+            except InvalidToken as exc:
+                # Same Fernet-key-rotation scenario as the password decrypt
+                # above, but for the OAuth refresh token. Without the
+                # original key we cannot recover the plaintext, and there
+                # is no operator-visible way to "re-enter" a refresh
+                # token (it can only be re-obtained by re-running the
+                # OAuth flow / re-importing auth.json). Surface a typed
+                # envelope so the dashboard can render an actionable
+                # message instead of a raw 500.
+                raise AccountCredentialsUnrecoverableError(account_id) from exc
+            result, rotated_tokens = await self._probe_proxy_payload(
+                refresh_token=refresh_token,
+                payload=payload,
+                password_plain=password_plain,
+            )
 
         # Refresh-token rotation safety. The probe just performed a real
         # OAuth refresh through the proposed proxy; if the upstream
@@ -610,6 +615,24 @@ class AccountsService:
             last_refresh=utcnow(),
         )
 
+    async def _probe_proxy_connectivity_payload(
+        self,
+        *,
+        payload: AccountProxyInput,
+        password_plain: str | None | object = _PASSWORD_UNSET,
+    ) -> ProbeResult:
+        probe_password = payload.password if password_plain is _PASSWORD_UNSET else cast(str | None, password_plain)
+        result: ProbeResult = await probe_proxy_connectivity(
+            host=payload.host,
+            port=payload.port,
+            username=payload.username,
+            password=probe_password,
+            remote_dns=payload.remote_dns,
+        )
+        if not result.ok:
+            raise ProxyProbeError(result.reason, result.detail)
+        return result
+
     async def clear_account_proxy(self, account_id: str) -> bool:
         """Remove the proxy configuration on an account (idempotent for empty).
 
@@ -629,13 +652,23 @@ class AccountsService:
     async def _reactivate_after_proxy_repair(self, account_id: str) -> None:
         """Bring proxy-failure-deactivated accounts back after operator repair."""
 
+        account = await self._repo.get_by_id(account_id)
+        if account is None or not _is_proxy_unreachable_deactivation(account):
+            return
         await self._repo.update_status_if_current(
             account_id,
             AccountStatus.ACTIVE,
             deactivation_reason=None,
             expected_status=AccountStatus.DEACTIVATED,
-            expected_deactivation_reason="proxy_unreachable",
+            expected_deactivation_reason=account.deactivation_reason,
         )
+
+
+def _is_proxy_unreachable_deactivation(account: Account) -> bool:
+    if account.status is not AccountStatus.DEACTIVATED:
+        return False
+    reason = account.deactivation_reason or ""
+    return reason == "proxy_unreachable" or reason.startswith("proxy_unreachable:")
 
 
 def _opencode_auth_export_filename(account: Account) -> str:

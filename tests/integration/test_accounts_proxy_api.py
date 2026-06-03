@@ -110,6 +110,31 @@ def _scripted_probe(result: ProbeResult, captured: dict | None = None):
     return _stub
 
 
+def _scripted_connectivity_probe(result: ProbeResult, captured: dict | None = None):
+    """Replace ``probe_proxy_connectivity`` with a deterministic stub."""
+
+    async def _stub(
+        *,
+        host,
+        port,
+        username,
+        password,
+        remote_dns,
+        settings=None,
+    ):
+        if captured is not None:
+            captured.update(
+                host=host,
+                port=port,
+                username=username,
+                password=password,
+                remote_dns=remote_dns,
+            )
+        return result
+
+    return _stub
+
+
 def _ok_probe_result() -> ProbeResult:
     return ProbeResult(
         reason=ProbeReason.OK,
@@ -703,20 +728,33 @@ async def test_set_proxy_reactivates_proxy_unreachable_account(async_client, mon
         updated = await repo.update_status(
             account_id,
             AccountStatus.DEACTIVATED,
-            "proxy_unreachable",
+            "proxy_unreachable: ProxyConnectionError - connection refused",
             blocked_at=None,
         )
         assert updated is True
 
+    async def _unexpected_oauth_probe(**_kwargs):
+        raise AssertionError("proxy-unreachable repair must not require OAuth refresh")
+
+    captured: dict = {}
+    monkeypatch.setattr("app.modules.accounts.service.probe_account_proxy", _unexpected_oauth_probe)
     monkeypatch.setattr(
-        "app.modules.accounts.service.probe_account_proxy",
-        _scripted_probe(_ok_probe_result()),
+        "app.modules.accounts.service.probe_proxy_connectivity",
+        _scripted_connectivity_probe(
+            ProbeResult(
+                reason=ProbeReason.OK,
+                upstream_status_code=204,
+                checked_at=utcnow(),
+            ),
+            captured,
+        ),
     )
     response = await async_client.post(
         f"/api/accounts/{account_id}/proxy",
         json={"host": "proxy.example.com", "port": 1080},
     )
     assert response.status_code == 200, response.text
+    assert captured["host"] == "proxy.example.com"
 
     list_response = await async_client.get("/api/accounts")
     target = next(a for a in list_response.json()["accounts"] if a["accountId"] == account_id)
