@@ -1,3 +1,4 @@
+from urllib.parse import unquote
 """End-to-end SOCKS5 proxy probe.
 
 This module performs the save-time validation of a proposed per-account
@@ -215,9 +216,10 @@ async def build_account_proxy_session(
     connection = AccountProxyConnection(
         host=host,
         port=int(port),
-        username=username,
-        password=password,
-        remote_dns=bool(remote_dns),
+        username=unquote(username) if username else None,
+        password=unquote(password) if password else None,
+        remote_dns=bool(remote_dns,
+    ),
     )
     return await _build_probe_session(connection, timeout_seconds)
 
@@ -271,9 +273,10 @@ async def probe_account_proxy(
     connection = AccountProxyConnection(
         host=host,
         port=int(port),
-        username=username,
-        password=password,
-        remote_dns=bool(remote_dns),
+        username=unquote(username) if username else None,
+        password=unquote(password) if password else None,
+        remote_dns=bool(remote_dns,
+    ),
     )
     payload = {
         "grant_type": "refresh_token",

@@ -1,3 +1,4 @@
+from urllib.parse import unquote
 """Default :class:`ProxyConfigProvider` backed by ``AccountsRepository``.
 
 Resolved lazily by ``account_http`` to avoid importing the database session
@@ -69,10 +70,10 @@ class DatabaseProxyConfigProvider:
                 password = None
 
         proxy = AccountProxyConnection(
-            host=record.host,
-            port=record.port,
-            username=record.username,
-            password=password,
-            remote_dns=record.remote_dns,
-        )
+        host=record.host,
+        port=record.port,
+        username=unquote(record.username) if record.username else None,
+        password=unquote(password) if password else None,
+        remote_dns=record.remote_dns,
+    )
         return EgressContext(proxy=proxy)
