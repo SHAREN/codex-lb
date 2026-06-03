@@ -763,6 +763,84 @@ async def test_set_proxy_reactivates_proxy_unreachable_account(async_client, mon
 
 
 @pytest.mark.asyncio
+async def test_set_proxy_on_session_deactivated_account_uses_connectivity_probe(async_client, monkeypatch):
+    account_id = await _import_account(async_client)
+    async with SessionLocal() as session:
+        repo = AccountsRepository(session)
+        updated = await repo.update_status(
+            account_id,
+            AccountStatus.DEACTIVATED,
+            "ChatGPT session ended - re-login required",
+            blocked_at=None,
+        )
+        assert updated is True
+
+    async def _unexpected_oauth_probe(**_kwargs):
+        raise AssertionError("disabled account proxy edit must not require OAuth refresh")
+
+    captured: dict = {}
+    monkeypatch.setattr("app.modules.accounts.service.probe_account_proxy", _unexpected_oauth_probe)
+    monkeypatch.setattr(
+        "app.modules.accounts.service.probe_proxy_connectivity",
+        _scripted_connectivity_probe(
+            ProbeResult(
+                reason=ProbeReason.OK,
+                upstream_status_code=204,
+                checked_at=utcnow(),
+            ),
+            captured,
+        ),
+    )
+    response = await async_client.post(
+        f"/api/accounts/{account_id}/proxy",
+        json={"host": "proxy.example.com", "port": 1080},
+    )
+    assert response.status_code == 200, response.text
+    assert captured["host"] == "proxy.example.com"
+
+    list_response = await async_client.get("/api/accounts")
+    target = next(a for a in list_response.json()["accounts"] if a["accountId"] == account_id)
+    assert target["status"] == "deactivated"
+    assert target["deactivationReason"] == "ChatGPT session ended - re-login required"
+
+
+@pytest.mark.asyncio
+async def test_set_proxy_on_paused_account_uses_connectivity_probe(async_client, monkeypatch):
+    account_id = await _import_account(async_client)
+    async with SessionLocal() as session:
+        repo = AccountsRepository(session)
+        updated = await repo.update_status(account_id, AccountStatus.PAUSED, blocked_at=None)
+        assert updated is True
+
+    async def _unexpected_oauth_probe(**_kwargs):
+        raise AssertionError("paused account proxy edit must not require OAuth refresh")
+
+    captured: dict = {}
+    monkeypatch.setattr("app.modules.accounts.service.probe_account_proxy", _unexpected_oauth_probe)
+    monkeypatch.setattr(
+        "app.modules.accounts.service.probe_proxy_connectivity",
+        _scripted_connectivity_probe(
+            ProbeResult(
+                reason=ProbeReason.OK,
+                upstream_status_code=204,
+                checked_at=utcnow(),
+            ),
+            captured,
+        ),
+    )
+    response = await async_client.post(
+        f"/api/accounts/{account_id}/proxy",
+        json={"host": "proxy.example.com", "port": 1080},
+    )
+    assert response.status_code == 200, response.text
+    assert captured["host"] == "proxy.example.com"
+
+    list_response = await async_client.get("/api/accounts")
+    target = next(a for a in list_response.json()["accounts"] if a["accountId"] == account_id)
+    assert target["status"] == "paused"
+
+
+@pytest.mark.asyncio
 async def test_clear_proxy_returns_404_for_unknown_account(async_client):
     response = await async_client.delete("/api/accounts/does_not_exist/proxy")
     assert response.status_code == 404

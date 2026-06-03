@@ -519,7 +519,7 @@ class AccountsService:
         else:
             password_plain = None
 
-        if _is_proxy_unreachable_deactivation(account):
+        if _can_change_proxy_without_oauth(account):
             result = await self._probe_proxy_connectivity_payload(payload=payload, password_plain=password_plain)
             rotated_tokens: _RotatedTokens | None = None
         else:
@@ -662,6 +662,10 @@ class AccountsService:
             expected_status=AccountStatus.DEACTIVATED,
             expected_deactivation_reason=account.deactivation_reason,
         )
+
+
+def _can_change_proxy_without_oauth(account: Account) -> bool:
+    return account.status in {AccountStatus.DEACTIVATED, AccountStatus.PAUSED}
 
 
 def _is_proxy_unreachable_deactivation(account: Account) -> bool:
