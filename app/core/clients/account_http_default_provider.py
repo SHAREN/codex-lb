@@ -1,19 +1,19 @@
+from __future__ import annotations
+
+import logging
 from urllib.parse import unquote
+
+from app.core.clients.account_http import AccountProxyConnection, EgressContext
+from app.core.crypto import TokenEncryptor
+from app.db.session import SessionLocal
+from app.modules.accounts.repository import AccountsRepository
+
 """Default :class:`ProxyConfigProvider` backed by ``AccountsRepository``.
 
 Resolved lazily by ``account_http`` to avoid importing the database session
 at module import time (which would create a cycle with the outbound HTTP
 client modules).
 """
-
-from __future__ import annotations
-
-import logging
-
-from app.core.clients.account_http import AccountProxyConnection, EgressContext
-from app.core.crypto import TokenEncryptor
-from app.db.session import SessionLocal
-from app.modules.accounts.repository import AccountsRepository
 
 logger = logging.getLogger(__name__)
 
