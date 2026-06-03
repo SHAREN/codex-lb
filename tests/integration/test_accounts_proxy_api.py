@@ -1,5 +1,3 @@
-"""Integration tests for the per-account SOCKS5 proxy API + service flow."""
-
 from __future__ import annotations
 
 import base64
@@ -17,6 +15,8 @@ from app.db.session import SessionLocal
 from app.modules.accounts.repository import AccountsRepository
 
 pytestmark = pytest.mark.integration
+
+"""Integration tests for the per-account SOCKS5 proxy API + service flow."""
 
 
 def _encode_jwt(payload: dict) -> str:
