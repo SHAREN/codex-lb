@@ -1,27 +1,3 @@
-"""End-to-end SOCKS5 proxy probe.
-
-This module performs the save-time validation of a proposed per-account
-SOCKS5 proxy configuration. It is intentionally narrow: it constructs a
-**one-shot** :class:`aiohttp_socks.ProxyConnector`, performs a real OAuth
-``refresh_token`` request against the configured ``auth_base_url`` (defaults
-to ``https://auth.openai.com``), and classifies the outcome into a typed
-:class:`ProbeResult`.
-
-Why a real refresh and not a lightweight HEAD?
-
-- We want to surface authentication regressions (e.g. revoked refresh
-  tokens) BEFORE we let the operator save a proxy that will then immediately
-  trip the runtime failure tracker.
-- Using the actual upstream OAuth endpoint exercises both the proxy
-  negotiation AND the TLS handshake AND the upstream response, so each of
-  the typed reasons (``proxy_connect``, ``proxy_auth``, ``tls``,
-  ``upstream_status``, ``timeout``) can be distinguished.
-
-Tests inject a stub session factory via :func:`_set_session_factory_for_test`
-to avoid spinning up a real SOCKS5 server on the unit-test path.
-"""
-
-
 from __future__ import annotations
 
 import asyncio
@@ -55,6 +31,29 @@ from app.core.clients.account_http import AccountProxyConnection
 from app.core.config.settings import Settings, get_settings
 from app.core.utils.request_id import get_request_id
 from app.core.utils.time import utcnow
+
+"""End-to-end SOCKS5 proxy probe.
+
+This module performs the save-time validation of a proposed per-account
+SOCKS5 proxy configuration. It is intentionally narrow: it constructs a
+**one-shot** :class:`aiohttp_socks.ProxyConnector`, performs a real OAuth
+``refresh_token`` request against the configured ``auth_base_url`` (defaults
+to ``https://auth.openai.com``), and classifies the outcome into a typed
+:class:`ProbeResult`.
+
+Why a real refresh and not a lightweight HEAD?
+
+- We want to surface authentication regressions (e.g. revoked refresh
+  tokens) BEFORE we let the operator save a proxy that will then immediately
+  trip the runtime failure tracker.
+- Using the actual upstream OAuth endpoint exercises both the proxy
+  negotiation AND the TLS handshake AND the upstream response, so each of
+  the typed reasons (``proxy_connect``, ``proxy_auth``, ``tls``,
+  ``upstream_status``, ``timeout``) can be distinguished.
+
+Tests inject a stub session factory via :func:`_set_session_factory_for_test`
+to avoid spinning up a real SOCKS5 server on the unit-test path.
+"""
 
 logger = logging.getLogger(__name__)
 
