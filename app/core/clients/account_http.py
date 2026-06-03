@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Per-account outbound HTTP client registry.
 
 This module mirrors the lifecycle of the global :mod:`app.core.clients.http`
@@ -26,7 +27,6 @@ the password via :class:`TokenEncryptor`. Tests inject a stub provider via
 :func:`set_proxy_config_provider` to avoid touching the database.
 """
 
-from __future__ import annotations
 
 import asyncio
 import contextlib
@@ -655,8 +655,8 @@ async def get_account_websocket_proxy_uri(account_id: str) -> str | None:
             if config.username:
                 from urllib.parse import quote  # noqa: PLC0415
 
-                user = quote(config.username, safe="")
-                password = quote(config.password or "", safe="")
+                user = config.username
+                password = (config.password or "")
                 userinfo = f"{user}:{password}@" if password else f"{user}@"
             else:
                 userinfo = ""
