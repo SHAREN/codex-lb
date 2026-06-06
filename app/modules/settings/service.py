@@ -18,6 +18,9 @@ class DashboardSettingsData:
     http_responses_session_bridge_prompt_cache_idle_ttl_seconds: int
     http_responses_session_bridge_gateway_safe_mode: bool
     sticky_reallocation_budget_threshold_pct: float
+    quota_reserve_enabled: bool
+    quota_reserve_primary_percent: float
+    quota_reserve_secondary_percent: float
     import_without_overwrite: bool
     totp_required_on_login: bool
     totp_configured: bool
@@ -43,6 +46,9 @@ class DashboardSettingsUpdateData:
     http_responses_session_bridge_prompt_cache_idle_ttl_seconds: int
     http_responses_session_bridge_gateway_safe_mode: bool
     sticky_reallocation_budget_threshold_pct: float
+    quota_reserve_enabled: bool
+    quota_reserve_primary_percent: float
+    quota_reserve_secondary_percent: float
     import_without_overwrite: bool
     totp_required_on_login: bool
     api_key_auth_enabled: bool
@@ -74,6 +80,9 @@ class SettingsService:
             ),
             http_responses_session_bridge_gateway_safe_mode=row.http_responses_session_bridge_gateway_safe_mode,
             sticky_reallocation_budget_threshold_pct=row.sticky_reallocation_budget_threshold_pct,
+            quota_reserve_enabled=row.quota_reserve_enabled,
+            quota_reserve_primary_percent=row.quota_reserve_primary_percent,
+            quota_reserve_secondary_percent=row.quota_reserve_secondary_percent,
             import_without_overwrite=row.import_without_overwrite,
             totp_required_on_login=row.totp_required_on_login,
             totp_configured=row.totp_secret_encrypted is not None,
@@ -104,6 +113,9 @@ class SettingsService:
             ),
             http_responses_session_bridge_gateway_safe_mode=payload.http_responses_session_bridge_gateway_safe_mode,
             sticky_reallocation_budget_threshold_pct=payload.sticky_reallocation_budget_threshold_pct,
+            quota_reserve_enabled=payload.quota_reserve_enabled,
+            quota_reserve_primary_percent=payload.quota_reserve_primary_percent,
+            quota_reserve_secondary_percent=payload.quota_reserve_secondary_percent,
             import_without_overwrite=payload.import_without_overwrite,
             totp_required_on_login=payload.totp_required_on_login,
             api_key_auth_enabled=payload.api_key_auth_enabled,
@@ -128,6 +140,9 @@ class SettingsService:
             ),
             http_responses_session_bridge_gateway_safe_mode=row.http_responses_session_bridge_gateway_safe_mode,
             sticky_reallocation_budget_threshold_pct=row.sticky_reallocation_budget_threshold_pct,
+            quota_reserve_enabled=row.quota_reserve_enabled,
+            quota_reserve_primary_percent=row.quota_reserve_primary_percent,
+            quota_reserve_secondary_percent=row.quota_reserve_secondary_percent,
             import_without_overwrite=row.import_without_overwrite,
             totp_required_on_login=row.totp_required_on_login,
             totp_configured=row.totp_secret_encrypted is not None,

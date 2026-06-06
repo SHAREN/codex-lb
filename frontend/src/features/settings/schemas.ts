@@ -30,6 +30,9 @@ export const DashboardSettingsSchema = z.object({
   limitWarmupPrompt: LimitWarmupPromptSchema.optional().default("Say OK."),
   limitWarmupCooldownSeconds: z.number().int().min(60).optional().default(3600),
   limitWarmupMinAvailablePercent: z.number().positive().max(100).optional().default(100),
+  quotaReserveEnabled: z.boolean().optional().default(false),
+  quotaReservePrimaryPercent: z.number().min(0).max(100).optional().default(0),
+  quotaReserveSecondaryPercent: z.number().min(0).max(100).optional().default(0),
 });
 
 export const SettingsUpdateRequestSchema = z.object({
@@ -50,6 +53,9 @@ export const SettingsUpdateRequestSchema = z.object({
   limitWarmupPrompt: LimitWarmupPromptSchema.optional(),
   limitWarmupCooldownSeconds: z.number().int().min(60).optional(),
   limitWarmupMinAvailablePercent: z.number().positive().max(100).optional(),
+  quotaReserveEnabled: z.boolean().optional(),
+  quotaReservePrimaryPercent: z.number().min(0).max(100).optional(),
+  quotaReserveSecondaryPercent: z.number().min(0).max(100).optional(),
 });
 
 export type DashboardSettings = z.infer<typeof DashboardSettingsSchema>;

@@ -14,6 +14,12 @@ const LIMIT_WARMUP_DEFAULTS = {
   limitWarmupMinAvailablePercent: 100,
 };
 
+const QUOTA_RESERVE_DEFAULTS = {
+  quotaReserveEnabled: false,
+  quotaReservePrimaryPercent: 0,
+  quotaReserveSecondaryPercent: 0,
+};
+
 const BASE_SETTINGS: DashboardSettings = {
   stickyThreadsEnabled: false,
   upstreamStreamTransport: "default",
@@ -28,6 +34,7 @@ const BASE_SETTINGS: DashboardSettings = {
   totpConfigured: false,
   apiKeyAuthEnabled: true,
   ...LIMIT_WARMUP_DEFAULTS,
+  ...QUOTA_RESERVE_DEFAULTS,
 };
 
 describe("RoutingSettings", () => {
@@ -56,6 +63,7 @@ describe("RoutingSettings", () => {
       totpRequiredOnLogin: false,
       apiKeyAuthEnabled: true,
       ...LIMIT_WARMUP_DEFAULTS,
+      ...QUOTA_RESERVE_DEFAULTS,
     });
 
     rerender(
@@ -82,6 +90,7 @@ describe("RoutingSettings", () => {
       totpRequiredOnLogin: false,
       apiKeyAuthEnabled: true,
       ...LIMIT_WARMUP_DEFAULTS,
+      ...QUOTA_RESERVE_DEFAULTS,
     });
   });
 
@@ -113,6 +122,7 @@ describe("RoutingSettings", () => {
       totpRequiredOnLogin: false,
       apiKeyAuthEnabled: true,
       ...LIMIT_WARMUP_DEFAULTS,
+      ...QUOTA_RESERVE_DEFAULTS,
     });
   });
 
@@ -143,6 +153,7 @@ describe("RoutingSettings", () => {
       totpRequiredOnLogin: false,
       apiKeyAuthEnabled: true,
       ...LIMIT_WARMUP_DEFAULTS,
+      ...QUOTA_RESERVE_DEFAULTS,
     });
 
     rerender(<RoutingSettings settings={BASE_SETTINGS} busy={false} onSave={onSave} />);
@@ -182,6 +193,7 @@ describe("RoutingSettings", () => {
       totpRequiredOnLogin: false,
       apiKeyAuthEnabled: true,
       ...LIMIT_WARMUP_DEFAULTS,
+      ...QUOTA_RESERVE_DEFAULTS,
     });
   });
 

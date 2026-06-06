@@ -407,6 +407,9 @@ export function createDashboardSettings(
 		limitWarmupPrompt: "Say OK.",
 		limitWarmupCooldownSeconds: 3600,
 		limitWarmupMinAvailablePercent: 100,
+		quotaReserveEnabled: false,
+		quotaReservePrimaryPercent: 0,
+		quotaReserveSecondaryPercent: 0,
 		...overrides,
 	});
 }

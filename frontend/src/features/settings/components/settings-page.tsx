@@ -9,6 +9,7 @@ import { buildSettingsUpdateRequest } from "@/features/settings/payload";
 import { AppearanceSettings } from "@/features/settings/components/appearance-settings";
 import { ImportSettings } from "@/features/settings/components/import-settings";
 import { PasswordSettings } from "@/features/settings/components/password-settings";
+import { QuotaReserveSettings } from "@/features/settings/components/quota-reserve-settings";
 import { RoutingSettings } from "@/features/settings/components/routing-settings";
 import { SessionSettings } from "@/features/settings/components/session-settings";
 import { SettingsSkeleton } from "@/features/settings/components/settings-skeleton";
@@ -80,6 +81,7 @@ export function SettingsPage() {
               busy={busy}
               onSave={handleSave}
             />
+            <QuotaReserveSettings settings={settings} busy={busy} onSave={handleSave} />
             <ImportSettings settings={settings} busy={busy} onSave={handleSave} />
             <PasswordSettings disabled={busy} />
             {passwordManagementEnabled ? (

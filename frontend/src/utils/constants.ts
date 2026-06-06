@@ -2,6 +2,7 @@ export const STATUS_LABELS = {
   active: "Active",
   paused: "Paused",
   limited: "Rate limited",
+  reserved: "Quota reserve",
   exceeded: "Quota exceeded",
   deactivated: "Deactivated",
 } as const;

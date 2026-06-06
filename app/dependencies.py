@@ -128,7 +128,14 @@ def get_accounts_context(
     usage_repository = UsageRepository(session)
     additional_usage_repository = AdditionalUsageRepository(session)
     limit_warmup_repository = LimitWarmupRepository(session)
-    service = AccountsService(repository, usage_repository, additional_usage_repository, limit_warmup_repository)
+    settings_repository = SettingsRepository(session)
+    service = AccountsService(
+        repository,
+        usage_repository,
+        additional_usage_repository,
+        limit_warmup_repository,
+        settings_repository,
+    )
     return AccountsContext(
         session=session,
         repository=repository,

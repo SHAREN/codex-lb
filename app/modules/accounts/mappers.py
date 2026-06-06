@@ -6,6 +6,7 @@ from app.core import usage as usage_core
 from app.core.auth import DEFAULT_PLAN, extract_id_token_claims, token_expiry_epoch_ms
 from app.core.crypto import TokenEncryptor
 from app.core.plan_types import coerce_account_plan_type
+from app.core.quota_reserve import QuotaReserveConfig, evaluate_quota_reserve
 from app.core.usage.quota import apply_usage_quota
 from app.core.usage.types import UsageTrendBucket, UsageWindowRow
 from app.core.utils.time import from_epoch_seconds
@@ -16,6 +17,7 @@ from app.modules.accounts.schemas import (
     AccountLimitWarmupStatus,
     AccountProxySummary,
     AccountRequestUsage,
+    AccountRoutingAvailability,
     AccountSummary,
     AccountTokenStatus,
     AccountUsage,
@@ -34,6 +36,7 @@ def build_account_summaries(
     additional_quotas_by_account: dict[str, list[AccountAdditionalQuota]] | None = None,
     limit_warmups_by_account: dict[str, AccountLimitWarmup] | None = None,
     encryptor: TokenEncryptor,
+    quota_reserve_config: QuotaReserveConfig | None = None,
     include_auth: bool = True,
 ) -> list[AccountSummary]:
     return [
@@ -45,6 +48,7 @@ def build_account_summaries(
             additional_quotas_by_account.get(account.id) if additional_quotas_by_account else None,
             limit_warmups_by_account.get(account.id) if limit_warmups_by_account else None,
             encryptor,
+            quota_reserve_config=quota_reserve_config,
             include_auth=include_auth,
         )
         for account in accounts
@@ -59,6 +63,7 @@ def _account_to_summary(
     additional_quotas: list[AccountAdditionalQuota] | None,
     limit_warmup: AccountLimitWarmup | None,
     encryptor: TokenEncryptor,
+    quota_reserve_config: QuotaReserveConfig | None = None,
     include_auth: bool = True,
 ) -> AccountSummary:
     plan_type = coerce_account_plan_type(account.plan_type, DEFAULT_PLAN)
@@ -122,6 +127,12 @@ def _account_to_summary(
         effective_secondary_usage,
         secondary_used_percent,
     )
+    routing_availability = _routing_availability_from_quota_reserve(
+        effective_status=effective_status,
+        primary_used_percent=primary_used_percent,
+        secondary_used_percent=secondary_used_percent,
+        quota_reserve_config=quota_reserve_config,
+    )
     return AccountSummary(
         account_id=account.id,
         email=account.email,
@@ -129,6 +140,7 @@ def _account_to_summary(
         display_name=account.alias or account.email,
         plan_type=plan_type,
         status=effective_status.value,
+        routing_availability=routing_availability,
         usage=AccountUsage(
             primary_remaining_percent=primary_remaining_percent,
             secondary_remaining_percent=secondary_remaining_percent,
@@ -149,6 +161,29 @@ def _account_to_summary(
         limit_warmup_enabled=account.limit_warmup_enabled,
         limit_warmup=_limit_warmup_to_status(limit_warmup),
         proxy=_build_proxy_summary(account),
+    )
+
+
+def _routing_availability_from_quota_reserve(
+    *,
+    effective_status: AccountStatus,
+    primary_used_percent: float | None,
+    secondary_used_percent: float | None,
+    quota_reserve_config: QuotaReserveConfig | None,
+) -> AccountRoutingAvailability:
+    if quota_reserve_config is None or effective_status != AccountStatus.ACTIVE:
+        return AccountRoutingAvailability()
+    evaluation = evaluate_quota_reserve(
+        primary_used_percent=primary_used_percent,
+        secondary_used_percent=secondary_used_percent,
+        config=quota_reserve_config,
+    )
+    if not evaluation.held:
+        return AccountRoutingAvailability()
+    return AccountRoutingAvailability(
+        available=False,
+        reason=evaluation.reason,
+        held_windows=list(evaluation.windows),
     )
 
 

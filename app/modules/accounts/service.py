@@ -29,6 +29,7 @@ from app.core.clients.account_proxy_probe import (
 )
 from app.core.crypto import TokenEncryptor
 from app.core.plan_types import coerce_account_plan_type
+from app.core.quota_reserve import QuotaReserveConfig
 from app.core.utils.time import naive_utc_to_epoch, to_utc_naive, utcnow
 from app.db.models import Account, AccountStatus
 from app.modules.accounts.mappers import build_account_summaries, build_account_usage_trends
@@ -50,6 +51,7 @@ from app.modules.accounts.schemas import (
 )
 from app.modules.limit_warmup.repository import LimitWarmupRepository
 from app.modules.proxy.account_cache import get_account_selection_cache
+from app.modules.settings.repository import SettingsRepository
 from app.modules.usage.additional_quota_keys import get_additional_display_label_for_quota_key
 from app.modules.usage.repository import AdditionalUsageRepository, UsageRepository
 from app.modules.usage.updater import AdditionalUsageRepositoryPort, UsageUpdater
@@ -113,11 +115,13 @@ class AccountsService:
         usage_repo: UsageRepository | None = None,
         additional_usage_repo: AdditionalUsageRepository | AdditionalUsageRepositoryPort | None = None,
         limit_warmup_repo: LimitWarmupRepository | None = None,
+        settings_repo: SettingsRepository | None = None,
     ) -> None:
         self._repo = repo
         self._usage_repo = usage_repo
         self._additional_usage_repo = additional_usage_repo
         self._limit_warmup_repo = limit_warmup_repo
+        self._settings_repo = settings_repo
         self._usage_updater = UsageUpdater(usage_repo, repo, additional_usage_repo) if usage_repo else None
         self._encryptor = TokenEncryptor()
 
@@ -181,6 +185,14 @@ class AccountsService:
         for account_quota_list in additional_quotas_by_account.values():
             account_quota_list.sort(key=lambda quota: quota.display_label or quota.quota_key or quota.limit_name)
 
+        quota_reserve_config = None
+        if self._settings_repo is not None:
+            settings = await self._settings_repo.get_or_create()
+            quota_reserve_config = QuotaReserveConfig(
+                enabled=settings.quota_reserve_enabled,
+                primary_percent=settings.quota_reserve_primary_percent,
+                secondary_percent=settings.quota_reserve_secondary_percent,
+            )
         return build_account_summaries(
             accounts=accounts,
             primary_usage=primary_usage,
@@ -189,6 +201,7 @@ class AccountsService:
             additional_quotas_by_account=additional_quotas_by_account,
             limit_warmups_by_account=limit_warmups_by_account,
             encryptor=self._encryptor,
+            quota_reserve_config=quota_reserve_config,
         )
 
     async def get_account_trends(self, account_id: str) -> AccountTrendsResponse | None:

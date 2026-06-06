@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AccountList } from "@/features/accounts/components/account-list";
+import { createAccountSummary } from "@/test/mocks/factories";
 import { useAccountQuotaDisplayStore } from "@/hooks/use-account-quota-display";
 
 describe("AccountList", () => {
@@ -288,4 +289,30 @@ describe("AccountList", () => {
     expect(screen.getByText("unique@example.com")).toBeInTheDocument();
     expect(screen.queryByText((_content, el) => el?.tagName === "P" && !!el.textContent?.match(/unique@example\.com \| ID/))).not.toBeInTheDocument();
   });
+});
+
+it("shows quota reserve badge for active accounts held by reserve", () => {
+  render(
+    <AccountList
+      accounts={[
+        createAccountSummary({
+          accountId: "reserved",
+          email: "reserved@example.com",
+          displayName: "reserved@example.com",
+          status: "active",
+          routingAvailability: {
+            available: false,
+            reason: "internal_quota_reserve",
+            heldWindows: ["primary"],
+          },
+        }),
+      ]}
+      selectedAccountId={null}
+      onSelect={vi.fn()}
+      onOpenImport={vi.fn()}
+      onOpenOauth={vi.fn()}
+    />,
+  );
+
+  expect(screen.getByText("Quota reserve")).toBeInTheDocument();
 });
