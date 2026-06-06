@@ -1,4 +1,3 @@
-from __future__ import annotations
 """Per-account outbound HTTP client registry.
 
 This module mirrors the lifecycle of the global :mod:`app.core.clients.http`
@@ -27,6 +26,7 @@ the password via :class:`TokenEncryptor`. Tests inject a stub provider via
 :func:`set_proxy_config_provider` to avoid touching the database.
 """
 
+from __future__ import annotations
 
 import asyncio
 import contextlib
@@ -36,7 +36,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from types import TracebackType
 from typing import Protocol
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import quote, urlparse, urlunparse
 
 import aiohttp
 from aiohttp_retry import RetryClient
@@ -653,10 +653,8 @@ async def get_account_websocket_proxy_uri(account_id: str) -> str | None:
         else:
             scheme = "socks5h" if config.remote_dns else "socks5"
             if config.username:
-                from urllib.parse import quote  # noqa: PLC0415
-
-                user = config.username
-                password = (config.password or "")
+                user = quote(config.username, safe="")
+                password = quote(config.password or "", safe="")
                 userinfo = f"{user}:{password}@" if password else f"{user}@"
             else:
                 userinfo = ""
