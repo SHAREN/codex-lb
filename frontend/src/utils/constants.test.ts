@@ -18,9 +18,11 @@ describe("STATUS_LABELS", () => {
       "exceeded",
       "limited",
       "paused",
+      "reserved",
     ]);
     expect(STATUS_LABELS.active).toBe("Active");
     expect(STATUS_LABELS.exceeded).toBe("Quota exceeded");
+    expect(STATUS_LABELS.reserved).toBe("Quota reserve");
   });
 });
 

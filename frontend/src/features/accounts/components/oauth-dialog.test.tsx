@@ -524,7 +524,7 @@ describe("OauthDialog", () => {
     );
 
     expect(
-      screen.getByText(/Sign-in complete\. Configure the proxy/),
+      screen.getByText(/Sign-in complete\. Validating the proxy/),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Finish setup & validate proxy" }),

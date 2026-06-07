@@ -1462,6 +1462,9 @@ async def test_select_codex_control_account_without_budget_uses_balancer(monkeyp
         sticky_max_age_seconds=123,
         account_ids=None,
         budget_threshold_pct=95.0,
+        quota_reserve_enabled=False,
+        quota_reserve_primary_percent=0.0,
+        quota_reserve_secondary_percent=0.0,
     )
 
 
