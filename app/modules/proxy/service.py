@@ -2191,7 +2191,7 @@ class ProxyService:
                         break
                     log_error_code = selection.error_code or "no_accounts"
                     log_error_message = selection.error_message or "No active accounts available"
-                    status_code = 429 if log_error_code == "account_response_create_cap" else 503
+                    status_code = 429 if _is_local_account_cap_code(log_error_code) else 503
                     raise ProxyResponseError(
                         status_code,
                         openai_error(
@@ -2948,9 +2948,14 @@ class ProxyService:
             if not account:
                 log_error_code = selection.error_code or "no_accounts"
                 log_error_message = selection.error_message or "No active accounts available"
+                status_code = 429 if _is_local_account_cap_code(log_error_code) else 503
                 raise ProxyResponseError(
-                    503,
-                    openai_error(log_error_code, log_error_message),
+                    status_code,
+                    openai_error(
+                        log_error_code,
+                        log_error_message,
+                        error_type="rate_limit_error" if status_code == 429 else "server_error",
+                    ),
                 )
             account_id_value = account.id
 
