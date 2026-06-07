@@ -14,11 +14,13 @@ from app.core.balancer import (
     handle_rate_limit,
     select_account,
 )
+from app.core.quota_reserve import QuotaReserveConfig
 from app.core.usage.quota import apply_usage_quota
 from app.db.models import Account, AccountStatus, UsageHistory
 from app.modules.proxy.load_balancer import (
     RuntimeState,
     _additional_quota_applies_to_plan,
+    _filter_states_for_quota_reserve,
     _select_account_preferring_budget_safe,
     _state_above_sticky_budget_threshold,
     _state_from_account,
@@ -2036,3 +2038,29 @@ def test_select_account_relative_availability_power_sharpens_preference_for_the_
     leader_ratio_power_1 = counts_power_1["leader"] / 3000
     leader_ratio_power_4 = counts_power_4["leader"] / 3000
     assert leader_ratio_power_4 > leader_ratio_power_1 + 0.05
+
+
+def test_quota_reserve_filter_blocks_primary_and_secondary_at_equality() -> None:
+    states = [
+        AccountState("primary", AccountStatus.ACTIVE, used_percent=97.0, secondary_used_percent=0.0),
+        AccountState("secondary", AccountStatus.ACTIVE, used_percent=0.0, secondary_used_percent=99.0),
+        AccountState("available", AccountStatus.ACTIVE, used_percent=96.9, secondary_used_percent=98.9),
+    ]
+
+    filtered = _filter_states_for_quota_reserve(
+        states,
+        config=QuotaReserveConfig(enabled=True, primary_percent=3.0, secondary_percent=1.0),
+    )
+
+    assert [state.account_id for state in filtered] == ["available"]
+
+
+def test_quota_reserve_filter_ignores_unknown_usage_windows() -> None:
+    states = [AccountState("unknown", AccountStatus.ACTIVE, used_percent=None, secondary_used_percent=None)]
+
+    filtered = _filter_states_for_quota_reserve(
+        states,
+        config=QuotaReserveConfig(enabled=True, primary_percent=3.0, secondary_percent=1.0),
+    )
+
+    assert [state.account_id for state in filtered] == ["unknown"]

@@ -19,7 +19,9 @@ export type AccountListItemProps = {
 export function AccountListItem({ account, selected, showAccountId = false, onSelect }: AccountListItemProps) {
   const blurred = usePrivacyStore((s) => s.blurred);
   const quotaDisplay = useAccountQuotaDisplayStore((s) => s.quotaDisplay);
-  const status = normalizeStatus(account.status);
+  const status = account.routingAvailability?.reason === "internal_quota_reserve"
+    ? "reserved"
+    : normalizeStatus(account.status);
   const title = account.displayName || account.email;
   const titleIsEmail = isEmailLabel(title, account.email);
   const emailSubtitle = account.displayName && account.displayName !== account.email

@@ -28,6 +28,7 @@ describe("AccountCard", () => {
         primaryRemainingPercent: null,
         secondaryRemainingPercent: 76,
       },
+      resetAtPrimary: null,
       windowMinutesPrimary: null,
       windowMinutesSecondary: 10_080,
     });

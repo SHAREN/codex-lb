@@ -109,6 +109,12 @@ class AccountProxyInput(DashboardModel):
         return value if value.strip() else None
 
 
+class AccountRoutingAvailability(DashboardModel):
+    available: bool = True
+    reason: str | None = None
+    held_windows: list[str] = Field(default_factory=list)
+
+
 class AccountProxySummary(DashboardModel):
     """Read-only proxy snapshot. Never includes the password value."""
 
@@ -132,6 +138,7 @@ class AccountSummary(DashboardModel):
     display_name: str
     plan_type: str
     status: str
+    routing_availability: AccountRoutingAvailability = Field(default_factory=AccountRoutingAvailability)
     usage: AccountUsage | None = None
     reset_at_primary: datetime | None = None
     reset_at_secondary: datetime | None = None

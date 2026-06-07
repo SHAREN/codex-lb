@@ -13,6 +13,12 @@ const LIMIT_WARMUP_DEFAULTS = {
   limitWarmupMinAvailablePercent: 100,
 };
 
+const QUOTA_RESERVE_DEFAULTS = {
+  quotaReserveEnabled: false,
+  quotaReservePrimaryPercent: 0,
+  quotaReserveSecondaryPercent: 0,
+};
+
 const baseSettings = {
   stickyThreadsEnabled: true,
   upstreamStreamTransport: "default" as const,
@@ -27,6 +33,7 @@ const baseSettings = {
   totpConfigured: true,
   apiKeyAuthEnabled: true,
   ...LIMIT_WARMUP_DEFAULTS,
+  ...QUOTA_RESERVE_DEFAULTS,
 };
 
 describe("SessionSettings", () => {
@@ -59,6 +66,7 @@ describe("SessionSettings", () => {
       totpRequiredOnLogin: false,
       apiKeyAuthEnabled: true,
       ...LIMIT_WARMUP_DEFAULTS,
+      ...QUOTA_RESERVE_DEFAULTS,
     });
   });
 
@@ -120,6 +128,7 @@ describe("SessionSettings", () => {
       totpRequiredOnLogin: false,
       apiKeyAuthEnabled: true,
       ...LIMIT_WARMUP_DEFAULTS,
+      ...QUOTA_RESERVE_DEFAULTS,
     });
   });
 });

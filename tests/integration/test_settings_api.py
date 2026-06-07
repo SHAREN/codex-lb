@@ -21,6 +21,9 @@ async def test_settings_api_get_and_update(async_client):
     assert payload["httpResponsesSessionBridgePromptCacheIdleTtlSeconds"] == 3600
     assert payload["httpResponsesSessionBridgeGatewaySafeMode"] is False
     assert payload["stickyReallocationBudgetThresholdPct"] == 95.0
+    assert payload["quotaReserveEnabled"] is False
+    assert payload["quotaReservePrimaryPercent"] == 0.0
+    assert payload["quotaReserveSecondaryPercent"] == 0.0
     assert payload["importWithoutOverwrite"] is True
     assert payload["totpRequiredOnLogin"] is False
     assert payload["totpConfigured"] is False
@@ -46,6 +49,9 @@ async def test_settings_api_get_and_update(async_client):
             "httpResponsesSessionBridgePromptCacheIdleTtlSeconds": 1800,
             "httpResponsesSessionBridgeGatewaySafeMode": True,
             "stickyReallocationBudgetThresholdPct": 90.0,
+            "quotaReserveEnabled": True,
+            "quotaReservePrimaryPercent": 3.0,
+            "quotaReserveSecondaryPercent": 1.0,
             "importWithoutOverwrite": False,
             "totpRequiredOnLogin": False,
             "apiKeyAuthEnabled": True,
@@ -70,6 +76,9 @@ async def test_settings_api_get_and_update(async_client):
     assert updated["httpResponsesSessionBridgePromptCacheIdleTtlSeconds"] == 1800
     assert updated["httpResponsesSessionBridgeGatewaySafeMode"] is True
     assert updated["stickyReallocationBudgetThresholdPct"] == 90.0
+    assert updated["quotaReserveEnabled"] is True
+    assert updated["quotaReservePrimaryPercent"] == 3.0
+    assert updated["quotaReserveSecondaryPercent"] == 1.0
     assert updated["importWithoutOverwrite"] is False
     assert updated["totpRequiredOnLogin"] is False
     assert updated["totpConfigured"] is False
@@ -95,6 +104,9 @@ async def test_settings_api_get_and_update(async_client):
     assert payload["httpResponsesSessionBridgePromptCacheIdleTtlSeconds"] == 1800
     assert payload["httpResponsesSessionBridgeGatewaySafeMode"] is True
     assert payload["stickyReallocationBudgetThresholdPct"] == 90.0
+    assert payload["quotaReserveEnabled"] is True
+    assert payload["quotaReservePrimaryPercent"] == 3.0
+    assert payload["quotaReserveSecondaryPercent"] == 1.0
     assert payload["importWithoutOverwrite"] is False
     assert payload["totpRequiredOnLogin"] is False
     assert payload["totpConfigured"] is False

@@ -3,6 +3,7 @@ from __future__ import annotations
 from cryptography.fernet import Fernet
 
 from app.core.crypto import TokenEncryptor
+from app.core.quota_reserve import QuotaReserveConfig
 from app.db.models import Account, AccountStatus, UsageHistory
 from app.modules.accounts.mappers import _account_to_summary, _effective_status_from_usage
 
@@ -156,3 +157,30 @@ def test_effective_status_recovers_quota_exceeded_when_only_primary_has_availabl
         )
         == AccountStatus.ACTIVE
     )
+
+
+def test_account_summary_marks_active_account_held_by_quota_reserve_without_status_change() -> None:
+    account = _account(AccountStatus.ACTIVE)
+    primary = _primary_usage(used_percent=97.0)
+    secondary = _secondary_usage(used_percent=50.0)
+
+    summary = _account_to_summary(
+        account,
+        primary,
+        secondary,
+        None,
+        None,
+        None,
+        TokenEncryptor(key=Fernet.generate_key()),
+        quota_reserve_config=QuotaReserveConfig(
+            enabled=True,
+            primary_percent=3.0,
+            secondary_percent=1.0,
+        ),
+        include_auth=False,
+    )
+
+    assert summary.status == "active"
+    assert summary.routing_availability.available is False
+    assert summary.routing_availability.reason == "internal_quota_reserve"
+    assert summary.routing_availability.held_windows == ["primary"]

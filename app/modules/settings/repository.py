@@ -28,6 +28,9 @@ class SettingsRepository:
             relative_availability_top_k=5,
             openai_cache_affinity_max_age_seconds=get_settings().openai_cache_affinity_max_age_seconds,
             dashboard_session_ttl_seconds=43200,
+            quota_reserve_enabled=False,
+            quota_reserve_primary_percent=0.0,
+            quota_reserve_secondary_percent=0.0,
             import_without_overwrite=True,
             totp_required_on_login=False,
             password_hash=None,
@@ -69,6 +72,9 @@ class SettingsRepository:
         http_responses_session_bridge_prompt_cache_idle_ttl_seconds: int | None = None,
         http_responses_session_bridge_gateway_safe_mode: bool | None = None,
         sticky_reallocation_budget_threshold_pct: float | None = None,
+        quota_reserve_enabled: bool | None = None,
+        quota_reserve_primary_percent: float | None = None,
+        quota_reserve_secondary_percent: float | None = None,
         import_without_overwrite: bool | None = None,
         totp_required_on_login: bool | None = None,
         api_key_auth_enabled: bool | None = None,
@@ -104,6 +110,12 @@ class SettingsRepository:
             settings.http_responses_session_bridge_gateway_safe_mode = http_responses_session_bridge_gateway_safe_mode
         if sticky_reallocation_budget_threshold_pct is not None:
             settings.sticky_reallocation_budget_threshold_pct = sticky_reallocation_budget_threshold_pct
+        if quota_reserve_enabled is not None:
+            settings.quota_reserve_enabled = quota_reserve_enabled
+        if quota_reserve_primary_percent is not None:
+            settings.quota_reserve_primary_percent = quota_reserve_primary_percent
+        if quota_reserve_secondary_percent is not None:
+            settings.quota_reserve_secondary_percent = quota_reserve_secondary_percent
         if import_without_overwrite is not None:
             settings.import_without_overwrite = import_without_overwrite
         if totp_required_on_login is not None:

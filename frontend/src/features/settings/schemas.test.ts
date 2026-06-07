@@ -26,6 +26,9 @@ describe("DashboardSettingsSchema", () => {
       limitWarmupPrompt: "Say OK.",
       limitWarmupCooldownSeconds: 3600,
       limitWarmupMinAvailablePercent: 100,
+      quotaReserveEnabled: true,
+      quotaReservePrimaryPercent: 3,
+      quotaReserveSecondaryPercent: 1,
     });
 
     expect(parsed.stickyThreadsEnabled).toBe(true);
@@ -39,6 +42,9 @@ describe("DashboardSettingsSchema", () => {
     expect(parsed.apiKeyAuthEnabled).toBe(true);
     expect(parsed.limitWarmupEnabled).toBe(false);
     expect(parsed.limitWarmupWindows).toBe("both");
+    expect(parsed.quotaReserveEnabled).toBe(true);
+    expect(parsed.quotaReservePrimaryPercent).toBe(3);
+    expect(parsed.quotaReserveSecondaryPercent).toBe(1);
   });
 
   it("parses legacy settings payload and applies defaults for missing routing fields", () => {
@@ -60,6 +66,9 @@ describe("DashboardSettingsSchema", () => {
     expect(parsed.limitWarmupPrompt).toBe("Say OK.");
     expect(parsed.limitWarmupCooldownSeconds).toBe(3600);
     expect(parsed.limitWarmupMinAvailablePercent).toBe(100);
+    expect(parsed.quotaReserveEnabled).toBe(false);
+    expect(parsed.quotaReservePrimaryPercent).toBe(0);
+    expect(parsed.quotaReserveSecondaryPercent).toBe(0);
   });
 });
 
@@ -83,6 +92,9 @@ describe("SettingsUpdateRequestSchema", () => {
       limitWarmupPrompt: "Say OK.",
       limitWarmupCooldownSeconds: 7200,
       limitWarmupMinAvailablePercent: 99,
+      quotaReserveEnabled: true,
+      quotaReservePrimaryPercent: 3,
+      quotaReserveSecondaryPercent: 1,
     });
 
     expect(parsed.openaiCacheAffinityMaxAgeSeconds).toBe(120);
@@ -96,6 +108,9 @@ describe("SettingsUpdateRequestSchema", () => {
     expect(parsed.apiKeyAuthEnabled).toBe(false);
     expect(parsed.limitWarmupEnabled).toBe(true);
     expect(parsed.limitWarmupWindows).toBe("primary");
+    expect(parsed.quotaReserveEnabled).toBe(true);
+    expect(parsed.quotaReservePrimaryPercent).toBe(3);
+    expect(parsed.quotaReserveSecondaryPercent).toBe(1);
   });
 
   it("accepts long session lifetimes above 30 days", () => {
@@ -122,6 +137,9 @@ describe("SettingsUpdateRequestSchema", () => {
     expect(parsed.relativeAvailabilityTopK).toBeUndefined();
     expect(parsed.openaiCacheAffinityMaxAgeSeconds).toBeUndefined();
     expect(parsed.dashboardSessionTtlSeconds).toBeUndefined();
+    expect(parsed.quotaReserveEnabled).toBeUndefined();
+    expect(parsed.quotaReservePrimaryPercent).toBeUndefined();
+    expect(parsed.quotaReserveSecondaryPercent).toBeUndefined();
   });
 
   it("rejects invalid types", () => {

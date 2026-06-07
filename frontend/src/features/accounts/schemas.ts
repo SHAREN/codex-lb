@@ -99,6 +99,12 @@ export const AccountProxyClearResponseSchema = z.object({
   status: z.string(),
 });
 
+export const AccountRoutingAvailabilitySchema = z.object({
+  available: z.boolean().default(true),
+  reason: z.string().nullable().optional(),
+  heldWindows: z.array(z.string()).default([]),
+});
+
 export const AccountSummarySchema = z.object({
   accountId: z.string(),
   email: z.string(),
@@ -106,6 +112,7 @@ export const AccountSummarySchema = z.object({
   displayName: z.string(),
   planType: z.string(),
   status: z.string(),
+  routingAvailability: AccountRoutingAvailabilitySchema.optional(),
   usage: AccountUsageSchema.nullable().optional(),
   resetAtPrimary: z.string().datetime({ offset: true }).nullable().optional(),
   resetAtSecondary: z.string().datetime({ offset: true }).nullable().optional(),
@@ -300,6 +307,7 @@ export const ImportStateSchema = z.object({
 
 export type UsageTrendPoint = z.infer<typeof UsageTrendPointSchema>;
 export type AccountUsageTrend = z.infer<typeof AccountUsageTrendSchema>;
+export type AccountRoutingAvailability = z.infer<typeof AccountRoutingAvailabilitySchema>;
 export type AccountSummary = z.infer<typeof AccountSummarySchema>;
 export type AccountAliasResponse = z.infer<typeof AccountAliasResponseSchema>;
 export type AccountLimitWarmupStatus = z.infer<typeof AccountLimitWarmupStatusSchema>;

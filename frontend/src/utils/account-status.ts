@@ -1,9 +1,10 @@
-export type DashboardAccountStatus = "active" | "paused" | "limited" | "exceeded" | "deactivated";
+export type DashboardAccountStatus = "active" | "paused" | "limited" | "reserved" | "exceeded" | "deactivated";
 
 export const STATUS_DOT: Record<DashboardAccountStatus, string> = {
   active: "bg-emerald-500",
   paused: "bg-amber-500",
   limited: "bg-orange-500",
+  reserved: "bg-orange-500",
   exceeded: "bg-red-500",
   deactivated: "bg-zinc-400",
 };

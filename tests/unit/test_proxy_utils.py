@@ -1462,6 +1462,9 @@ async def test_select_codex_control_account_without_budget_uses_balancer(monkeyp
         sticky_max_age_seconds=123,
         account_ids=None,
         budget_threshold_pct=95.0,
+        quota_reserve_enabled=False,
+        quota_reserve_primary_percent=0.0,
+        quota_reserve_secondary_percent=0.0,
     )
 
 
@@ -14426,6 +14429,44 @@ async def test_compact_responses_account_create_cap_is_local_overload(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_compact_responses_quota_reserve_is_local_rate_limit(monkeypatch):
+    settings = _make_proxy_settings(log_proxy_service_tier_trace=False)
+    request_logs = _RequestLogsRecorder()
+    service = proxy_service.ProxyService(_repo_factory(request_logs))
+
+    monkeypatch.setattr(proxy_service, "get_settings_cache", lambda: _SettingsCache(settings))
+    monkeypatch.setattr(proxy_service, "get_settings", lambda: settings)
+    monkeypatch.setattr(
+        service._load_balancer,
+        "select_account",
+        AsyncMock(
+            return_value=AccountSelection(
+                account=None,
+                error_code="internal_quota_reserve",
+                error_message="No accounts available: all eligible accounts are held by internal quota reserve",
+            )
+        ),
+    )
+    ensure_fresh = AsyncMock()
+    monkeypatch.setattr(service, "_ensure_fresh", ensure_fresh)
+    upstream = AsyncMock()
+    monkeypatch.setattr(proxy_service, "core_compact_responses", upstream)
+
+    payload = ResponsesCompactRequest.model_validate({"model": "gpt-5.1", "instructions": "hi", "input": []})
+
+    with pytest.raises(proxy_module.ProxyResponseError) as exc_info:
+        await service.compact_responses(payload, {"session_id": "sid-compact"})
+
+    exc = _assert_proxy_response_error(exc_info.value)
+    assert exc.status_code == 429
+    assert _proxy_error_code(exc) == "internal_quota_reserve"
+    assert exc.payload["error"]["type"] == "rate_limit_error"
+    ensure_fresh.assert_not_awaited()
+    upstream.assert_not_awaited()
+    assert request_logs.calls[0]["error_code"] == "internal_quota_reserve"
+
+
+@pytest.mark.asyncio
 async def test_compact_responses_pops_timeout_overrides_when_account_create_cap_raises(monkeypatch):
     settings = _make_proxy_settings(log_proxy_service_tier_trace=False)
     settings.proxy_account_response_create_limit = 1
@@ -14955,6 +14996,48 @@ async def test_transcribe_selection_budget_exhaustion_returns_request_timeout(mo
     assert exc.status_code == 502
     assert _proxy_error_code(exc) == "upstream_unavailable"
     assert request_logs.calls[0]["error_code"] == "upstream_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_transcribe_quota_reserve_is_local_rate_limit(monkeypatch):
+    settings = _make_proxy_settings(log_proxy_service_tier_trace=False)
+    request_logs = _RequestLogsRecorder()
+    service = proxy_service.ProxyService(_repo_factory(request_logs))
+
+    monkeypatch.setattr(proxy_service, "get_settings_cache", lambda: _SettingsCache(settings))
+    monkeypatch.setattr(proxy_service, "get_settings", lambda: settings)
+    monkeypatch.setattr(
+        service._load_balancer,
+        "select_account",
+        AsyncMock(
+            return_value=AccountSelection(
+                account=None,
+                error_code="internal_quota_reserve",
+                error_message="No accounts available: all eligible accounts are held by internal quota reserve",
+            )
+        ),
+    )
+    ensure_fresh = AsyncMock()
+    monkeypatch.setattr(service, "_ensure_fresh", ensure_fresh)
+    upstream = AsyncMock()
+    monkeypatch.setattr(proxy_service, "core_transcribe_audio", upstream)
+
+    with pytest.raises(proxy_module.ProxyResponseError) as exc_info:
+        await service.transcribe(
+            audio_bytes=b"\x01\x02",
+            filename="sample.wav",
+            content_type="audio/wav",
+            prompt=None,
+            headers={"session_id": "sid-transcribe"},
+        )
+
+    exc = _assert_proxy_response_error(exc_info.value)
+    assert exc.status_code == 429
+    assert _proxy_error_code(exc) == "internal_quota_reserve"
+    assert exc.payload["error"]["type"] == "rate_limit_error"
+    ensure_fresh.assert_not_awaited()
+    upstream.assert_not_awaited()
+    assert request_logs.calls[0]["error_code"] == "internal_quota_reserve"
 
 
 @pytest.mark.asyncio

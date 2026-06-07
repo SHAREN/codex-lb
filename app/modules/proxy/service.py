@@ -2191,7 +2191,7 @@ class ProxyService:
                         break
                     log_error_code = selection.error_code or "no_accounts"
                     log_error_message = selection.error_message or "No active accounts available"
-                    status_code = 429 if log_error_code == "account_response_create_cap" else 503
+                    status_code = 429 if _is_local_account_cap_code(log_error_code) else 503
                     raise ProxyResponseError(
                         status_code,
                         openai_error(
@@ -2948,9 +2948,14 @@ class ProxyService:
             if not account:
                 log_error_code = selection.error_code or "no_accounts"
                 log_error_message = selection.error_message or "No active accounts available"
+                status_code = 429 if _is_local_account_cap_code(log_error_code) else 503
                 raise ProxyResponseError(
-                    503,
-                    openai_error(log_error_code, log_error_message),
+                    status_code,
+                    openai_error(
+                        log_error_code,
+                        log_error_message,
+                        error_type="rate_limit_error" if status_code == 429 else "server_error",
+                    ),
                 )
             account_id_value = account.id
 
@@ -5287,6 +5292,9 @@ class ProxyService:
             sticky_max_age_seconds=affinity.max_age_seconds,
             account_ids=scoped_account_ids,
             budget_threshold_pct=settings.sticky_reallocation_budget_threshold_pct,
+            quota_reserve_enabled=getattr(settings, "quota_reserve_enabled", False),
+            quota_reserve_primary_percent=getattr(settings, "quota_reserve_primary_percent", 0.0),
+            quota_reserve_secondary_percent=getattr(settings, "quota_reserve_secondary_percent", 0.0),
         )
         if selection.account is None:
             return None
@@ -11951,6 +11959,9 @@ class ProxyService:
                         additional_limit_name=additional_limit_name,
                         account_ids={preferred_account_id},
                         budget_threshold_pct=settings.sticky_reallocation_budget_threshold_pct,
+                        quota_reserve_enabled=getattr(settings, "quota_reserve_enabled", False),
+                        quota_reserve_primary_percent=getattr(settings, "quota_reserve_primary_percent", 0.0),
+                        quota_reserve_secondary_percent=getattr(settings, "quota_reserve_secondary_percent", 0.0),
                         lease_kind=lease_kind,
                         estimated_lease_tokens=estimated_lease_tokens,
                     )
@@ -11979,6 +11990,9 @@ class ProxyService:
                     account_ids=scoped_account_ids,
                     exclude_account_ids=excluded_account_ids_set,
                     budget_threshold_pct=settings.sticky_reallocation_budget_threshold_pct,
+                    quota_reserve_enabled=getattr(settings, "quota_reserve_enabled", False),
+                    quota_reserve_primary_percent=getattr(settings, "quota_reserve_primary_percent", 0.0),
+                    quota_reserve_secondary_percent=getattr(settings, "quota_reserve_secondary_percent", 0.0),
                     lease_kind=lease_kind,
                     estimated_lease_tokens=estimated_lease_tokens,
                 )
@@ -12172,7 +12186,7 @@ def _is_account_neutral_error_code(code: str | None) -> bool:
 
 
 def _is_local_account_cap_code(code: str | None) -> bool:
-    return code in {"account_response_create_cap", "account_stream_cap"}
+    return code in {"account_response_create_cap", "account_stream_cap", "internal_quota_reserve"}
 
 
 def _classify_upstream_close(

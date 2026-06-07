@@ -36,6 +36,12 @@ from app.core.metrics.prometheus import (
 )
 from app.core.openai.model_registry import get_model_registry
 from app.core.plan_types import account_plan_matches_allowed, normalize_account_plan_type
+from app.core.quota_reserve import (
+    INTERNAL_QUOTA_RESERVE_ERROR_CODE,
+    INTERNAL_QUOTA_RESERVE_ERROR_MESSAGE,
+    QuotaReserveConfig,
+    evaluate_quota_reserve,
+)
 from app.core.resilience.circuit_breaker import are_all_account_circuit_breakers_open
 from app.core.resilience.degradation import get_status as get_degradation_status
 from app.core.resilience.degradation import set_degraded, set_normal
@@ -264,11 +270,19 @@ class LoadBalancer:
         account_ids: Collection[str] | None = None,
         exclude_account_ids: Collection[str] | None = None,
         budget_threshold_pct: float = 95.0,
+        quota_reserve_enabled: bool = False,
+        quota_reserve_primary_percent: float = 0.0,
+        quota_reserve_secondary_percent: float = 0.0,
         lease_kind: AccountLeaseKind | None = None,
         estimated_lease_tokens: float = 0.0,
     ) -> AccountSelection:
         excluded_ids = set(exclude_account_ids or ())
         scoped_account_ids = None if account_ids is None else set(account_ids)
+        quota_reserve_config = QuotaReserveConfig(
+            enabled=quota_reserve_enabled,
+            primary_percent=quota_reserve_primary_percent,
+            secondary_percent=quota_reserve_secondary_percent,
+        )
 
         async def load_selection_inputs() -> _SelectionInputs:
             selection_inputs = await self._load_selection_inputs(
@@ -323,17 +337,32 @@ class LoadBalancer:
                         runtime=self._runtime,
                     )
                     selection_states = _filter_states_for_account_caps(states, lease_kind=lease_kind)
-                    if not selection_states and states:
-                        result = SelectionResult(None, "No available accounts")
-                        error_message = result.error_message
-                        selection_error_code = _account_cap_error_code(lease_kind)
-                        logger.warning(
-                            "Account cap exhausted during selection lease_kind=%s reason=%s candidates=%s",
-                            lease_kind,
-                            selection_error_code,
-                            len(states),
-                        )
-                        _record_account_cap_rejection(lease_kind)
+                    pre_reserve_selection_count = len(selection_states)
+                    selection_states = _filter_states_for_quota_reserve(selection_states, config=quota_reserve_config)
+                    quota_reserve_held_count = pre_reserve_selection_count - len(selection_states)
+                    quota_reserve_exhausted = quota_reserve_held_count > 0 and not any(
+                        state.status == AccountStatus.ACTIVE for state in selection_states
+                    )
+                    if (not selection_states or quota_reserve_exhausted) and states:
+                        if quota_reserve_held_count > 0:
+                            result = SelectionResult(None, INTERNAL_QUOTA_RESERVE_ERROR_MESSAGE)
+                            error_message = result.error_message
+                            selection_error_code = INTERNAL_QUOTA_RESERVE_ERROR_CODE
+                            logger.warning(
+                                "Quota reserve held all selection candidates candidates=%s",
+                                pre_reserve_selection_count,
+                            )
+                        else:
+                            result = SelectionResult(None, "No available accounts")
+                            error_message = result.error_message
+                            selection_error_code = _account_cap_error_code(lease_kind)
+                            logger.warning(
+                                "Account cap exhausted during selection lease_kind=%s reason=%s candidates=%s",
+                                lease_kind,
+                                selection_error_code,
+                                len(states),
+                            )
+                            _record_account_cap_rejection(lease_kind)
                     else:
                         selection_error_code = None
                         result = _select_account_preferring_budget_safe(
@@ -498,16 +527,30 @@ class LoadBalancer:
                 selection_states = (
                     states if hard_sticky else _filter_states_for_account_caps(states, lease_kind=lease_kind)
                 )
-                if not selection_states and states:
-                    result = SelectionResult(None, "No available accounts")
-                    selection_error_code = _account_cap_error_code(lease_kind)
-                    logger.warning(
-                        "Account cap exhausted during sticky selection lease_kind=%s reason=%s candidates=%s",
-                        lease_kind,
-                        selection_error_code,
-                        len(states),
-                    )
-                    _record_account_cap_rejection(lease_kind)
+                pre_reserve_selection_count = len(selection_states)
+                selection_states = _filter_states_for_quota_reserve(selection_states, config=quota_reserve_config)
+                quota_reserve_held_count = pre_reserve_selection_count - len(selection_states)
+                quota_reserve_exhausted = quota_reserve_held_count > 0 and not any(
+                    state.status == AccountStatus.ACTIVE for state in selection_states
+                )
+                if (not selection_states or quota_reserve_exhausted) and states:
+                    if quota_reserve_held_count > 0:
+                        result = SelectionResult(None, INTERNAL_QUOTA_RESERVE_ERROR_MESSAGE)
+                        selection_error_code = INTERNAL_QUOTA_RESERVE_ERROR_CODE
+                        logger.warning(
+                            "Quota reserve held all sticky selection candidates candidates=%s",
+                            pre_reserve_selection_count,
+                        )
+                    else:
+                        result = SelectionResult(None, "No available accounts")
+                        selection_error_code = _account_cap_error_code(lease_kind)
+                        logger.warning(
+                            "Account cap exhausted during sticky selection lease_kind=%s reason=%s candidates=%s",
+                            lease_kind,
+                            selection_error_code,
+                            len(states),
+                        )
+                        _record_account_cap_rejection(lease_kind)
                 else:
                     selection_error_code = None
                     async with self._repo_factory() as repos:
@@ -602,6 +645,7 @@ class LoadBalancer:
                 if (
                     selected_snapshot is None
                     and selection_error_code is not None
+                    and selection_error_code != INTERNAL_QUOTA_RESERVE_ERROR_CODE
                     and not hard_sticky
                     and attempt < _MAX_SELECTION_ATTEMPTS
                 ):
@@ -1341,6 +1385,27 @@ def _account_cap_error_code(lease_kind: AccountLeaseKind | None) -> str | None:
     if lease_kind == "stream":
         return "account_stream_cap"
     return None
+
+
+def _filter_states_for_quota_reserve(
+    states: Iterable[AccountState],
+    *,
+    config: QuotaReserveConfig,
+) -> list[AccountState]:
+    filtered: list[AccountState] = []
+    for state in states:
+        if state.status != AccountStatus.ACTIVE:
+            filtered.append(state)
+            continue
+        evaluation = evaluate_quota_reserve(
+            primary_used_percent=state.used_percent,
+            secondary_used_percent=state.secondary_used_percent,
+            config=config,
+        )
+        if evaluation.held:
+            continue
+        filtered.append(state)
+    return filtered
 
 
 def _record_account_lease_acquired(kind: AccountLeaseKind) -> None:

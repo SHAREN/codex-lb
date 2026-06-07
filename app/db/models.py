@@ -349,6 +349,24 @@ class DashboardSettings(Base):
         server_default=text("95.0"),
         nullable=False,
     )
+    quota_reserve_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default=false(),
+        nullable=False,
+    )
+    quota_reserve_primary_percent: Mapped[float] = mapped_column(
+        Float,
+        default=0.0,
+        server_default=text("0.0"),
+        nullable=False,
+    )
+    quota_reserve_secondary_percent: Mapped[float] = mapped_column(
+        Float,
+        default=0.0,
+        server_default=text("0.0"),
+        nullable=False,
+    )
     limit_warmup_enabled: Mapped[bool] = mapped_column(
         Boolean,
         default=False,

@@ -22,6 +22,9 @@ export function buildSettingsUpdateRequest(
     limitWarmupPrompt: settings.limitWarmupPrompt,
     limitWarmupCooldownSeconds: settings.limitWarmupCooldownSeconds,
     limitWarmupMinAvailablePercent: settings.limitWarmupMinAvailablePercent,
+    quotaReserveEnabled: settings.quotaReserveEnabled,
+    quotaReservePrimaryPercent: settings.quotaReservePrimaryPercent,
+    quotaReserveSecondaryPercent: settings.quotaReserveSecondaryPercent,
     ...patch,
   };
 }
