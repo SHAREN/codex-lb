@@ -9,6 +9,7 @@
 - [x] 2.3 Add a hard internal quota reserve filter before account selection without mutating persisted account status.
 - [x] 2.4 Ensure sticky sessions and API-key scoped account pools cannot bypass the reserve filter.
 - [x] 2.5 Add accounts API display metadata for reserve-held active accounts.
+- [x] 2.6 Force-close cached per-account SOCKS egress when quota reserve failover rejects a preferred account or bridge reattach hits a retryable SOCKS connect failure.
 
 ## 3. Frontend
 

@@ -37,6 +37,7 @@ from app.core.auth.refresh import (
 from app.core.balancer import PERMANENT_FAILURE_CODES, RoutingStrategy, failover_decision
 from app.core.balancer.rendezvous_hash import select_node
 from app.core.balancer.types import ClassifiedFailure, UpstreamError
+from app.core.clients.account_http import close_account_client_for_failover
 from app.core.clients.files import FileProxyError, pop_files_timeout_overrides, push_files_timeout_overrides
 from app.core.clients.files import create_file as core_create_file
 from app.core.clients.files import finalize_file as core_finalize_file
@@ -357,6 +358,7 @@ _UPSTREAM_UNAVAILABLE_TRANSIENT_MESSAGE_MARKERS = (
     "connection aborted",
     "connection closed",
     "connection reset",
+    "failed to connect to socks proxy",
     "keepalive ping timeout",
     "no close frame",
     "server disconnected",
@@ -7617,7 +7619,27 @@ class ProxyService:
                 )
                 break
             except ProxyResponseError as exc:
-                if exc.status_code != 401 or _remaining_budget_seconds(deadline) <= 0:
+                if exc.status_code != 401:
+                    if (
+                        selected_is_preferred
+                        and _remaining_budget_seconds(deadline) > 0
+                        and _is_retryable_failover_proxy_error(exc)
+                    ):
+                        await _close_account_egress_before_failover(
+                            account.id,
+                            reason="retryable_preferred_proxy_error",
+                        )
+                        if retry_same_account_once:
+                            retry_same_account_once = False
+                            await release_selected_account_lease()
+                            continue
+                        excluded_account_ids.add(account.id)
+                        preferred_candidate_id = None
+                        await release_selected_account_lease()
+                        continue
+                    await release_selected_account_lease()
+                    raise
+                if _remaining_budget_seconds(deadline) <= 0:
                     await release_selected_account_lease()
                     raise
                 try:
@@ -7642,6 +7664,19 @@ class ProxyService:
                     break
                 except ProxyResponseError as retry_exc:
                     if retry_exc.status_code != 401:
+                        if (
+                            selected_is_preferred
+                            and _remaining_budget_seconds(deadline) > 0
+                            and _is_retryable_failover_proxy_error(retry_exc)
+                        ):
+                            await _close_account_egress_before_failover(
+                                account.id,
+                                reason="retryable_preferred_proxy_error_after_refresh",
+                            )
+                            excluded_account_ids.add(account.id)
+                            preferred_candidate_id = None
+                            await release_selected_account_lease()
+                            continue
                         await release_selected_account_lease()
                         raise
                     await self._handle_proxy_error(account, retry_exc)
@@ -11974,6 +12009,11 @@ class ProxyService:
                             preferred_account_id,
                         )
                         return preferred_selection
+                    if preferred_selection.error_code == "internal_quota_reserve":
+                        await _close_account_egress_before_failover(
+                            preferred_account_id,
+                            reason="quota_reserve_preferred_rejected",
+                        )
                     if not fallback_on_preferred_account_unavailable:
                         return preferred_selection
                 selection = await self._load_balancer.select_account(
@@ -12183,6 +12223,30 @@ def _should_retry_transient_stream_error(code: str | None, message: str | None) 
 
 def _is_account_neutral_error_code(code: str | None) -> bool:
     return is_local_overload_error_code(code) or code == "proxy_unavailable"
+
+
+def _proxy_response_error_details(exc: ProxyResponseError) -> tuple[str | None, str | None]:
+    error = _parse_openai_error(exc.payload)
+    if error is None:
+        return None, None
+    return _normalize_error_code(error.code, error.type), error.message
+
+
+def _is_retryable_failover_proxy_error(exc: ProxyResponseError) -> bool:
+    code, message = _proxy_response_error_details(exc)
+    return _should_retry_transient_stream_error(code, message)
+
+
+async def _close_account_egress_before_failover(account_id: str, *, reason: str) -> None:
+    try:
+        await close_account_client_for_failover(account_id)
+    except Exception:
+        logger.warning(
+            "Failed to close account egress before failover account_id=%s reason=%s",
+            account_id,
+            reason,
+            exc_info=True,
+        )
 
 
 def _is_local_account_cap_code(code: str | None) -> bool:

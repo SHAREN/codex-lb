@@ -1468,6 +1468,57 @@ async def test_select_codex_control_account_without_budget_uses_balancer(monkeyp
     )
 
 
+def test_retryable_failover_proxy_error_detects_socks_connect_failure() -> None:
+    exc = proxy_module.ProxyResponseError(
+        502,
+        openai_error(
+            "upstream_unavailable",
+            "failed to connect to SOCKS proxy: connection refused",
+        ),
+    )
+
+    assert proxy_service._is_retryable_failover_proxy_error(exc) is True
+
+
+@pytest.mark.asyncio
+async def test_select_account_with_budget_closes_preferred_egress_when_quota_reserve_falls_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request_logs = _RequestLogsRecorder()
+    service = proxy_service.ProxyService(_repo_factory(request_logs))
+    preferred_account = _make_account("acc_reserved")
+    spare_account = _make_account("acc_spare")
+    close_account_egress = AsyncMock()
+    monkeypatch.setattr(proxy_service, "_close_account_egress_before_failover", close_account_egress)
+    select_account = AsyncMock(
+        side_effect=[
+            AccountSelection(
+                account=None,
+                error_message="No accounts available: all eligible accounts are held by internal quota reserve",
+                error_code="internal_quota_reserve",
+            ),
+            AccountSelection(account=spare_account, error_message=None),
+        ]
+    )
+    monkeypatch.setattr(service._load_balancer, "select_account", select_account)
+
+    selection = await service._select_account_with_budget(
+        time.monotonic() + 10.0,
+        request_id="req_quota_reserve_failover",
+        kind="responses",
+        preferred_account_id=preferred_account.id,
+        fallback_on_preferred_account_unavailable=True,
+    )
+
+    assert selection.account is spare_account
+    close_account_egress.assert_awaited_once_with(
+        preferred_account.id,
+        reason="quota_reserve_preferred_rejected",
+    )
+    assert select_account.await_args_list[0].kwargs["account_ids"] == {preferred_account.id}
+    assert select_account.await_args_list[1].kwargs["exclude_account_ids"] == set()
+
+
 @pytest.fixture(autouse=True)
 def _install_default_proxy_runtime_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     settings = _make_proxy_settings(log_proxy_service_tier_trace=False)
