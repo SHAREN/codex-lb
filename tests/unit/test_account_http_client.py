@@ -15,6 +15,7 @@ from app.core.clients.account_http import (
     EgressContext,
     ProxyConfigProvider,
     acquire_account_http_client,
+    close_account_client_for_failover,
     close_all_account_clients,
     invalidate_account_client,
     lease_account_http_client,
@@ -557,6 +558,40 @@ async def test_invalidate_account_client_retires_in_flight_client() -> None:
         proxy_retry.close.assert_awaited_once()
 
     # Cache is empty after invalidation.
+    assert account_http_module._running_managed_clients_for_test() == ()
+
+
+@pytest.mark.asyncio
+async def test_close_account_client_for_failover_force_closes_in_flight_client() -> None:
+    proxy_http = MagicMock()
+    proxy_ws = MagicMock()
+    proxy_http.close = AsyncMock()
+    proxy_ws.close = AsyncMock()
+    proxy_retry = MagicMock()
+    proxy_retry.close = AsyncMock()
+
+    connection = AccountProxyConnection("p", 1080, None, None, True)
+    set_proxy_config_provider(_StaticProvider({"acc": connection}))
+
+    with (
+        patch("app.core.clients.account_http.ProxyConnector"),
+        patch(
+            "app.core.clients.account_http.aiohttp.ClientSession",
+            side_effect=[proxy_http, proxy_ws],
+        ),
+        patch(
+            "app.core.clients.account_http.RetryClient",
+            return_value=proxy_retry,
+        ),
+    ):
+        lease = await acquire_account_http_client("acc")
+        try:
+            await asyncio.wait_for(close_account_client_for_failover("acc"), timeout=0.5)
+        finally:
+            await lease.close()
+
+    proxy_ws.close.assert_awaited_once()
+    proxy_retry.close.assert_awaited_once()
     assert account_http_module._running_managed_clients_for_test() == ()
 
 

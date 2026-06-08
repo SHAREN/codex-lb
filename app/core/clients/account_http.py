@@ -561,6 +561,26 @@ async def _record_proxy_errors(account_id: str) -> AsyncIterator[None]:
         yield
 
 
+async def _evict_account_client(
+    account_id: str,
+    *,
+    force_close: bool,
+    wait_closed: bool,
+) -> None:
+    managed: _ManagedAccountHttpClient | None = None
+    async with _account_clients_lock:
+        managed = _account_clients.pop(account_id, None)
+        if managed is not None:
+            _request_account_client_close_locked(managed, force=force_close)
+
+    # Drop the WS proxy URI cache entry too — same invalidation contract.
+    async with _account_websocket_proxy_uri_lock:
+        _account_websocket_proxy_uri_cache.pop(account_id, None)
+
+    if managed is not None and wait_closed:
+        await managed.closed.wait()
+
+
 async def invalidate_account_client(account_id: str) -> None:
     """Drop the cached client for ``account_id`` and retire any in-flight one.
 
@@ -577,14 +597,7 @@ async def invalidate_account_client(account_id: str) -> None:
       failure timestamps.
     """
 
-    async with _account_clients_lock:
-        managed = _account_clients.pop(account_id, None)
-        if managed is not None:
-            _request_account_client_close_locked(managed)
-
-    # Drop the WS proxy URI cache entry too — same invalidation contract.
-    async with _account_websocket_proxy_uri_lock:
-        _account_websocket_proxy_uri_cache.pop(account_id, None)
+    await _evict_account_client(account_id, force_close=False, wait_closed=False)
     # Lazy import to avoid a cycle: ``account_proxy_failures`` imports this
     # module's ``invalidate_account_client`` from its deactivation callback.
     try:
@@ -595,6 +608,21 @@ async def invalidate_account_client(account_id: str) -> None:
         await get_default_tracker().reset_for_account(account_id)
     except Exception:  # pragma: no cover - defensive; failures are non-fatal
         logger.warning("Failed to reset proxy failure tracker for account_id=%s", account_id, exc_info=True)
+
+
+async def close_account_client_for_failover(account_id: str) -> None:
+    """Force-close cached account egress before failover builds a replacement.
+
+    Quota reserve and retry failovers can abandon an account's in-progress
+    SOCKS5 path before normal lease retirement runs. Force-closing and awaiting
+    the cached client here guarantees the next selected account gets a fresh
+    SOCKS connector/TCP pool instead of inheriting a stale connector context.
+
+    Unlike :func:`invalidate_account_client`, this does not reset proxy failure
+    counters because the proxy configuration itself did not change.
+    """
+
+    await _evict_account_client(account_id, force_close=True, wait_closed=True)
 
 
 async def close_all_account_clients() -> None:

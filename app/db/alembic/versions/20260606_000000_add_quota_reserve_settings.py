@@ -1,7 +1,7 @@
 """add quota reserve settings
 
 Revision ID: 20260606_000000_add_quota_reserve_settings
-Revises: 20260601_000000_merge_relative_availability_and_usage_raw_heads
+Revises: 20260523_000000_add_accounts_proxy_columns
 Create Date: 2026-06-06
 """
 
@@ -12,7 +12,7 @@ from alembic import op
 from sqlalchemy.engine import Connection
 
 revision = "20260606_000000_add_quota_reserve_settings"
-down_revision = "20260601_000000_merge_relative_availability_and_usage_raw_heads"
+down_revision = "20260523_000000_add_accounts_proxy_columns"
 branch_labels = None
 depends_on = None
 

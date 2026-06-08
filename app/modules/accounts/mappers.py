@@ -91,11 +91,13 @@ def _account_to_summary(
     status_primary_usage = effective_primary_usage
     status_primary_used_percent = primary_used_percent
     primary_has_plan_capacity = usage_core.capacity_for_plan(plan_type, "primary") != 0.0
-    primary_has_reported_quota = effective_primary_usage is not None and primary_used_percent is not None
-    if not primary_has_plan_capacity and not primary_has_reported_quota:
-        if account.status != AccountStatus.RATE_LIMITED:
-            status_primary_usage = None
-            status_primary_used_percent = None
+    primary_window_is_default = (
+        effective_primary_usage is not None
+        and effective_primary_usage.window_minutes == usage_core.default_window_minutes("primary")
+    )
+    if not primary_has_plan_capacity and primary_window_is_default:
+        status_primary_usage = None
+        status_primary_used_percent = None
         effective_primary_usage = None
         primary_used_percent = None
         primary_remaining_percent = None
@@ -243,14 +245,18 @@ def _effective_status_from_usage(
         credits_unlimited=_first_not_none(primary_usage, secondary_usage, "credits_unlimited"),
         credits_balance=_first_not_none(primary_usage, secondary_usage, "credits_balance"),
     )
-    if account.status == AccountStatus.RATE_LIMITED and status == AccountStatus.ACTIVE:
-        if (
+    if account.status == AccountStatus.RATE_LIMITED:
+        reset_expired = (
             account.blocked_at is None
             and account.reset_at is not None
             and account.reset_at <= datetime.now(timezone.utc).timestamp()
-        ):
+        )
+        if status == AccountStatus.ACTIVE and reset_expired:
             return status
-        return account.status
+        if status == AccountStatus.RATE_LIMITED and reset_expired and primary_used_percent is None:
+            return AccountStatus.ACTIVE
+        if status == AccountStatus.ACTIVE:
+            return account.status
     return status
 
 
